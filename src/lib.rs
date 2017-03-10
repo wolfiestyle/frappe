@@ -202,8 +202,9 @@ impl<T: SumType2 + Clone + 'static> Stream<T>
                 _ => true,  // sent to a dropped stream, but the other is still alive. keep this callback
             }
         });
-        let stream_1 = Stream{ cbs: cbs_1, source: Some(Rc::new(self.clone())) };
-        let stream_2 = Stream{ cbs: cbs_2, source: Some(Rc::new(self.clone())) };
+        let source_rc = Rc::new(self.clone());
+        let stream_1 = Stream{ cbs: cbs_1, source: Some(source_rc.clone()) };
+        let stream_2 = Stream{ cbs: cbs_2, source: Some(source_rc) };
         (stream_1, stream_2)
     }
 }
