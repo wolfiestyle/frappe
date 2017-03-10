@@ -152,6 +152,37 @@ impl<T: Clone + 'static> Stream<T>
     }
 }
 
+impl<T: Clone + 'static> Stream<Option<T>>
+{
+    /// Filters a stream of `Option`s, returning the unwrapped `Some` values
+    pub fn filter_some(&self) -> Stream<T>
+    {
+        self.filter_map(|opt| opt.into_owned())
+    }
+}
+
+impl<T, E> Stream<Result<T, E>>
+    where T: Clone + 'static, E: Clone + 'static
+{
+    /// Splits a Result into two streams with their unwrapped Ok and Err values
+    pub fn split_result(&self) -> (Stream<T>, Stream<E>)
+    {
+        let (cbs_ok, weak_ok) = rc_and_weak(Callbacks::new());
+        let (cbs_err, weak_err) = rc_and_weak(Callbacks::new());
+        self.cbs.borrow_mut().push(move |result| {
+            match (result.is_ok(), weak_ok.upgrade(), weak_err.upgrade()) {
+                (true, Some(cb), _) => { cb.borrow_mut().call(result.into_owned().ok().unwrap()); true },
+                (false, _, Some(cb)) => { cb.borrow_mut().call(result.into_owned().err().unwrap()); true },
+                (_, None, None) => return false,  // both output steams dropped, drop this callback
+                _ => true,  // sent to a dropped stream, but the other is still alive. keep this callback
+            }
+        });
+        let stream_ok = Stream{ cbs: cbs_ok, source: Some(Rc::new(self.clone())) };
+        let stream_err = Stream{ cbs: cbs_err, source: Some(Rc::new(self.clone())) };
+        (stream_ok, stream_err)
+    }
+}
+
 impl<T: Clone + 'static> Stream<Stream<T>>
 {
     /// Listens to the events from the last stream sent to a nested stream
