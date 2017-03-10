@@ -56,3 +56,50 @@ impl<T: Clone> Callbacks<T>
 // type erasure
 pub trait Untyped {}
 impl<T> Untyped for T {}
+
+// generic sum type of size two
+pub trait SumType2
+{
+    type Type1;
+    type Type2;
+
+    fn from_type1(val: Self::Type1) -> Self;
+    fn from_type2(val: Self::Type2) -> Self;
+
+    fn is_type1(&self) -> bool;
+    fn is_type2(&self) -> bool;
+
+    fn into_type1(self) -> Option<Self::Type1>;
+    fn into_type2(self) -> Option<Self::Type2>;
+}
+
+impl<T, E> SumType2 for Result<T, E>
+{
+    type Type1 = T;
+    type Type2 = E;
+
+    fn from_type1(val: Self::Type1) -> Self { Ok(val) }
+    fn from_type2(val: Self::Type2) -> Self { Err(val) }
+
+    fn is_type1(&self) -> bool { self.is_ok() }
+    fn is_type2(&self) -> bool { self.is_err() }
+
+    fn into_type1(self) -> Option<Self::Type1> { self.ok() }
+    fn into_type2(self) -> Option<Self::Type2> { self.err() }
+}
+
+#[cfg(feature="either")]
+impl<L, R> SumType2 for ::either::Either<L, R>
+{
+    type Type1 = L;
+    type Type2 = R;
+
+    fn from_type1(val: Self::Type1) -> Self { ::either::Either::Left(val) }
+    fn from_type2(val: Self::Type2) -> Self { ::either::Either::Right(val) }
+
+    fn is_type1(&self) -> bool { self.is_left() }
+    fn is_type2(&self) -> bool { self.is_right() }
+
+    fn into_type1(self) -> Option<Self::Type1> { self.left() }
+    fn into_type2(self) -> Option<Self::Type2> { self.right() }
+}

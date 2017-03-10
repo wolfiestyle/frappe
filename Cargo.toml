@@ -3,4 +3,8 @@ name = "frappe"
 version = "0.1.0"
 authors = ["darkstalker <slayerbeast@gmail.com>"]
 
+[features]
+default = ["either"]
+
 [dependencies]
+either = { version = "1.0.3", optional = true }

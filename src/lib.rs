@@ -1,13 +1,19 @@
+#[cfg(feature="either")]
+pub extern crate either;
+
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::borrow::Cow;
 use std::ptr;
 
 mod types;
-use types::{Callbacks, Untyped};
+use types::{Callbacks, Untyped, SumType2};
 
 mod helpers;
 use helpers::{rc_and_weak, with_weak};
+
+#[cfg(feature="either")]
+use either::Either;
 
 /// A source of values that feeds the streams connected to it
 #[derive(Clone)]
@@ -103,6 +109,25 @@ impl<T: Clone + 'static> Stream<T>
         Stream{ cbs: new_cbs, source: Some(Rc::new((self.clone(), other.clone()))) }
     }
 
+    /// Merges two streams of different types
+    #[cfg(feature="either")]
+    pub fn merge_with<U, F, R>(&self, other: &Stream<U>, f: F) -> Stream<R>
+        where F: Fn(Either<Cow<T>, Cow<U>>) -> R + 'static,
+        U: Clone + 'static, R: Clone + 'static
+    {
+        let (new_cbs, weak1) = rc_and_weak(Callbacks::new());
+        let weak2 = weak1.clone();
+        let f1 = Rc::new(f);
+        let f2 = f1.clone();
+        self.cbs.borrow_mut().push(move |arg| {
+            with_weak(&weak1, |cb| cb.borrow_mut().call(f1(Either::Left(arg))))
+        });
+        other.cbs.borrow_mut().push(move |arg| {
+            with_weak(&weak2, |cb| cb.borrow_mut().call(f2(Either::Right(arg))))
+        });
+        Stream{ cbs: new_cbs, source: Some(Rc::new((self.clone(), other.clone()))) }
+    }
+
     /// Read the values without modifying them
     pub fn inspect<F>(self, f: F) -> Self
         where F: Fn(Cow<T>) + 'static
@@ -161,25 +186,25 @@ impl<T: Clone + 'static> Stream<Option<T>>
     }
 }
 
-impl<T, E> Stream<Result<T, E>>
-    where T: Clone + 'static, E: Clone + 'static
+impl<T: SumType2 + Clone + 'static> Stream<T>
+    where T::Type1: Clone + 'static, T::Type2: Clone + 'static
 {
-    /// Splits a Result into two streams with their unwrapped Ok and Err values
-    pub fn split_result(&self) -> (Stream<T>, Stream<E>)
+    /// Splits a two element sum type stream into two streams with the unwrapped values
+    pub fn split(&self) -> (Stream<T::Type1>, Stream<T::Type2>)
     {
-        let (cbs_ok, weak_ok) = rc_and_weak(Callbacks::new());
-        let (cbs_err, weak_err) = rc_and_weak(Callbacks::new());
+        let (cbs_1, weak_1) = rc_and_weak(Callbacks::new());
+        let (cbs_2, weak_2) = rc_and_weak(Callbacks::new());
         self.cbs.borrow_mut().push(move |result| {
-            match (result.is_ok(), weak_ok.upgrade(), weak_err.upgrade()) {
-                (true, Some(cb), _) => { cb.borrow_mut().call(result.into_owned().ok().unwrap()); true },
-                (false, _, Some(cb)) => { cb.borrow_mut().call(result.into_owned().err().unwrap()); true },
+            match (result.is_type1(), weak_1.upgrade(), weak_2.upgrade()) {
+                (true, Some(cb), _) => { cb.borrow_mut().call(result.into_owned().into_type1().unwrap()); true },
+                (false, _, Some(cb)) => { cb.borrow_mut().call(result.into_owned().into_type2().unwrap()); true },
                 (_, None, None) => return false,  // both output steams dropped, drop this callback
                 _ => true,  // sent to a dropped stream, but the other is still alive. keep this callback
             }
         });
-        let stream_ok = Stream{ cbs: cbs_ok, source: Some(Rc::new(self.clone())) };
-        let stream_err = Stream{ cbs: cbs_err, source: Some(Rc::new(self.clone())) };
-        (stream_ok, stream_err)
+        let stream_1 = Stream{ cbs: cbs_1, source: Some(Rc::new(self.clone())) };
+        let stream_2 = Stream{ cbs: cbs_2, source: Some(Rc::new(self.clone())) };
+        (stream_1, stream_2)
     }
 }
 
