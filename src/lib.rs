@@ -5,6 +5,7 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use std::borrow::Cow;
 use std::ptr;
+use std::sync::mpsc;
 
 mod types;
 use types::{Callbacks, Untyped, SumType2};
@@ -134,6 +135,16 @@ impl<T: Clone + 'static> Stream<T>
     {
         self.cbs.borrow_mut().push(move |arg| { f(arg); true });
         self
+    }
+
+    /// Creates a channel and sends the stream events through it
+    pub fn channel(&self) -> mpsc::Receiver<T>
+    {
+        let (tx, rx) = mpsc::channel();
+        self.cbs.borrow_mut().push(move |arg| {
+            tx.send(arg.into_owned()).is_ok()
+        });
+        rx
     }
 
     /// Creates a Signal that holds the last value sent to this Stream
