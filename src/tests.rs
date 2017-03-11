@@ -1,4 +1,5 @@
 use super::*;
+use std::fmt::Debug;
 
 #[test]
 fn stream_basic()
@@ -137,4 +138,28 @@ fn signal_switch()
 
     signal_sink.send(Signal::constant(2));
     assert_eq!(switched.sample(), 2);
+}
+
+#[derive(Debug)]
+struct Storage<T>(Vec<T>);
+
+impl<T> Storage<T>
+{
+    fn new() -> Self { Storage(Vec::new()) }
+    fn push(mut self, a: T) -> Self { self.0.push(a); self }
+}
+
+impl<T: Debug> Clone for Storage<T>
+{
+    fn clone(&self) -> Self { panic!("storage cloned! {:?}", self.0) }
+}
+
+#[test]
+fn cloning()
+{
+    let sink = Sink::new();
+    let accum = sink.stream().fold(Storage::new(), |a, v| a.push(*v));
+
+    sink.feed(0..5);
+    accum.sample_with(|res| assert_eq!(res.0, [0, 1, 2, 3, 4]));
 }
