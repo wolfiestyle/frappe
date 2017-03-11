@@ -87,11 +87,19 @@ fn stream_channel()
     let sink = Sink::new();
     let rx = sink.stream().channel();
 
-    let thread = std::thread::spawn(move || rx.try_iter().map(|a| a * 2).collect());
-    sink.feed(0..5);
+    let thread = std::thread::spawn(move || {
+        let mut sum = 0;
+        while let Some(val) = rx.recv().unwrap()
+        {
+            sum += val;
+        }
+        sum
+    });
+    sink.feed((1..100).map(Some));
+    sink.send(None);
 
-    let result: Vec<i32> = thread.join().unwrap();
-    assert_eq!(result, [0, 2, 4, 6, 8]);
+    let result = thread.join().unwrap();
+    assert_eq!(result, 4950);
 }
 
 #[test]
