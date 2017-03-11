@@ -169,3 +169,38 @@ fn cloning()
     sink.feed(0..5);
     accum.sample_with(|res| assert_eq!(res.0, [0, 1, 2, 3, 4]));
 }
+
+#[test]
+fn filter_extra()
+{
+    let sink = Sink::new();
+    let stream = sink.stream();
+    let sign_res = stream.map(|a| if *a >= 0 { Ok(*a) } else { Err(*a) });
+    let even_opt = stream.map(|a| if *a % 2 == 0 { Some(*a) } else { None });
+    let s_even = even_opt.filter_some().fold(vec![], vec_cons);
+    let s_pos = sign_res.filter_ok().fold(vec![], vec_cons);
+    let s_neg = sign_res.filter_err().fold(vec![], vec_cons);
+
+    sink.feed(vec![1, 8, -3, 42, -66]);
+
+    assert_eq!(s_even.sample(), [8, 42, -66]);
+    assert_eq!(s_pos.sample(), [1, 8, 42]);
+    assert_eq!(s_neg.sample(), [-3, -66]);
+}
+
+#[cfg(feature="either")]
+#[test]
+fn filter_either()
+{
+    use super::either::*;
+
+    let sink = Sink::new();
+    let sign = sink.stream().map(|a| if *a >= 0 { Left(*a) } else { Right(*a) });
+    let s_pos = sign.filter_left().fold(vec![], vec_cons);
+    let s_neg = sign.filter_right().fold(vec![], vec_cons);
+
+    sink.feed(vec![1, 8, -3, 42, -66]);
+
+    assert_eq!(s_pos.sample(), [1, 8, 42]);
+    assert_eq!(s_neg.sample(), [-3, -66]);
+}

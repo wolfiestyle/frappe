@@ -197,6 +197,39 @@ impl<T: Clone + 'static> Stream<Option<T>>
     }
 }
 
+impl <T, E> Stream<Result<T, E>>
+    where T: Clone + 'static, E: Clone + 'static
+{
+    /// Filters a stream of `Result`s, returning the unwrapped `Ok` values
+    pub fn filter_ok(&self) -> Stream<T>
+    {
+        self.filter_map(|res| if res.is_ok() { res.into_owned().ok() } else { None })
+    }
+
+    /// Filters a stream of `Result`s, returning the unwrapped `Err` values
+    pub fn filter_err(&self) -> Stream<E>
+    {
+        self.filter_map(|res| if res.is_err() { res.into_owned().err() } else { None })
+    }
+}
+
+#[cfg(feature="either")]
+impl <L, R> Stream<Either<L, R>>
+    where L: Clone + 'static, R: Clone + 'static
+{
+    /// Filters a stream of `Either`s, returning the unwrapped `Left` values
+    pub fn filter_left(&self) -> Stream<L>
+    {
+        self.filter_map(|res| if res.is_left() { res.into_owned().left() } else { None })
+    }
+
+    /// Filters a stream of `Either`s, returning the unwrapped `Right` values
+    pub fn filter_right(&self) -> Stream<R>
+    {
+        self.filter_map(|res| if res.is_right() { res.into_owned().right() } else { None })
+    }
+}
+
 impl<T: SumType2 + Clone + 'static> Stream<T>
     where T::Type1: Clone + 'static, T::Type2: Clone + 'static
 {
