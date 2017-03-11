@@ -93,3 +93,40 @@ fn stream_channel()
     let result: Vec<i32> = thread.join().unwrap();
     assert_eq!(result, [0, 2, 4, 6, 8]);
 }
+
+#[test]
+fn stream_switch()
+{
+    let stream_sink = Sink::new();
+    let sink1 = Sink::new();
+    let sink2 = Sink::new();
+
+    let switched = stream_sink.stream().switch();
+    let events = switched.channel();
+
+    sink1.send(1);
+    sink2.send(2);
+
+    stream_sink.send(sink2.stream());
+    sink1.send(3);
+    sink2.send(4);
+    assert_eq!(events.try_recv(), Ok(4));
+
+    stream_sink.send(sink1.stream());
+    sink1.send(5);
+    sink2.send(6);
+    assert_eq!(events.try_recv(), Ok(5));
+}
+
+#[test]
+fn signal_switch()
+{
+    let signal_sink = Sink::new();
+    let switched = signal_sink.stream().hold(Signal::constant(0)).switch();
+
+    signal_sink.send(Signal::constant(1));
+    assert_eq!(switched.sample(), 1);
+
+    signal_sink.send(Signal::constant(2));
+    assert_eq!(switched.sample(), 2);
+}
