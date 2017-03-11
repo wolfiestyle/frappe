@@ -30,10 +30,16 @@ fn signal_basic()
     assert_eq!(signal.sample(), val);
 
     let sink = Sink::new();
-    let signal = sink.stream().hold(0).map(|a| *a * 2);
+    let stream = sink.stream();
+    let s_double = stream.hold(0).map(|a| *a * 2);
+    let s_odd = stream.hold_if(0, |a| *a % 2 != 0);
+
     sink.send(2);
+    sink.send(3);
     sink.send(4);
-    assert_eq!(signal.sample(), 8);
+
+    assert_eq!(s_double.sample(), 8);
+    assert_eq!(s_odd.sample(), 3);
 }
 
 fn vec_cons<T: Clone>(mut v: Vec<T>, x: Cow<T>) -> Vec<T> { v.push(x.into_owned()); v }
