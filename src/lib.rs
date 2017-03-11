@@ -1,3 +1,5 @@
+//! FRP library for Rust
+
 #[cfg(feature="either")]
 pub extern crate either;
 
@@ -110,7 +112,7 @@ impl<T: Clone + 'static> Stream<T>
         Stream{ cbs: new_cbs, source: Some(Rc::new((self.clone(), other.clone()))) }
     }
 
-    /// Merges two streams of different types
+    /// Merges two streams of different types using the provided function
     #[cfg(feature="either")]
     pub fn merge_with<U, F, R>(&self, other: &Stream<U>, f: F) -> Stream<R>
         where F: Fn(Either<Cow<T>, Cow<U>>) -> R + 'static,
@@ -190,7 +192,7 @@ impl<T: Clone + 'static> Stream<T>
 
 impl<T: Clone + 'static> Stream<Option<T>>
 {
-    /// Filters a stream of `Option`s, returning the unwrapped `Some` values
+    /// Filters a stream of `Option`, returning the unwrapped `Some` values
     pub fn filter_some(&self) -> Stream<T>
     {
         self.filter_map(|opt| opt.into_owned())
@@ -200,13 +202,13 @@ impl<T: Clone + 'static> Stream<Option<T>>
 impl <T, E> Stream<Result<T, E>>
     where T: Clone + 'static, E: Clone + 'static
 {
-    /// Filters a stream of `Result`s, returning the unwrapped `Ok` values
+    /// Filters a stream of `Result`, returning the unwrapped `Ok` values
     pub fn filter_ok(&self) -> Stream<T>
     {
         self.filter_map(|res| if res.is_ok() { res.into_owned().ok() } else { None })
     }
 
-    /// Filters a stream of `Result`s, returning the unwrapped `Err` values
+    /// Filters a stream of `Result`, returning the unwrapped `Err` values
     pub fn filter_err(&self) -> Stream<E>
     {
         self.filter_map(|res| if res.is_err() { res.into_owned().err() } else { None })
@@ -217,13 +219,13 @@ impl <T, E> Stream<Result<T, E>>
 impl <L, R> Stream<Either<L, R>>
     where L: Clone + 'static, R: Clone + 'static
 {
-    /// Filters a stream of `Either`s, returning the unwrapped `Left` values
+    /// Filters a stream of `Either`, returning the unwrapped `Left` values
     pub fn filter_left(&self) -> Stream<L>
     {
         self.filter_map(|res| if res.is_left() { res.into_owned().left() } else { None })
     }
 
-    /// Filters a stream of `Either`s, returning the unwrapped `Right` values
+    /// Filters a stream of `Either`, returning the unwrapped `Right` values
     pub fn filter_right(&self) -> Stream<R>
     {
         self.filter_map(|res| if res.is_right() { res.into_owned().right() } else { None })
@@ -300,7 +302,7 @@ impl<T> SigVal<T>
     }
 }
 
-// Represents a continuous value that changes over time
+/// Represents a continuous value that changes over time
 #[derive(Clone)]
 pub struct Signal<T>
 {
@@ -338,8 +340,9 @@ impl<T: Clone> Signal<T>
     }
 
     /// Sample by reference.
+    ///
     /// This is meant to be the most efficient way when cloning is undesirable,
-    /// but it requires a callback to prevent outliving the RefCell borrow
+    /// but it requires a callback to prevent outliving the internal `RefCell` borrow
     pub fn sample_with<F, R>(&self, cb: F) -> R
         where F: FnOnce(Cow<T>) -> R
     {
@@ -364,7 +367,7 @@ impl<T: Clone> Signal<T>
         }
     }
 
-    /// Takes a snapshot of the Signal every time the trigger signal fires
+    /// Takes a snapshot of this signal every time the trigger stream fires
     pub fn snapshot<S, F, R>(&self, trigger: &Stream<S>, f: F) -> Stream<R>
         where F: Fn(Cow<T>, Cow<S>) -> R + 'static,
         S: Clone + 'static, R: Clone + 'static, T: 'static

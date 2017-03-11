@@ -2,6 +2,12 @@
 name = "frappe"
 version = "0.1.0"
 authors = ["darkstalker <slayerbeast@gmail.com>"]
+description = "FRP library for Rust"
+documentation = "https://docs.rs/frappe"
+repository = "https://github.com/darkstalker/frappe"
+readme = "README.md"
+keywords = ["frp", "reactive", "event", "stream"]
+license = "MIT"
 
 [features]
 default = ["either"]
