@@ -361,3 +361,6 @@ impl<T: Clone, U: Into<Rc<T>>> From<U> for Signal<T>
         Signal::constant(val)
     }
 }
+
+#[cfg(test)]
+mod tests;
