@@ -10,7 +10,8 @@ use std::ptr;
 use std::sync::mpsc;
 
 mod types;
-use types::{Callbacks, Untyped, SumType2};
+use types::{Callbacks, Untyped};
+pub use types::SumType2;
 
 mod helpers;
 use helpers::{rc_and_weak, with_weak};
@@ -195,46 +196,25 @@ impl<T: Clone + 'static> Stream<Option<T>>
     /// Filters a stream of `Option`, returning the unwrapped `Some` values
     pub fn filter_some(&self) -> Stream<T>
     {
-        self.filter_map(|opt| opt.into_owned())
-    }
-}
-
-impl <T, E> Stream<Result<T, E>>
-    where T: Clone + 'static, E: Clone + 'static
-{
-    /// Filters a stream of `Result`, returning the unwrapped `Ok` values
-    pub fn filter_ok(&self) -> Stream<T>
-    {
-        self.filter_map(|res| if res.is_ok() { res.into_owned().ok() } else { None })
-    }
-
-    /// Filters a stream of `Result`, returning the unwrapped `Err` values
-    pub fn filter_err(&self) -> Stream<E>
-    {
-        self.filter_map(|res| if res.is_err() { res.into_owned().err() } else { None })
-    }
-}
-
-#[cfg(feature="either")]
-impl <L, R> Stream<Either<L, R>>
-    where L: Clone + 'static, R: Clone + 'static
-{
-    /// Filters a stream of `Either`, returning the unwrapped `Left` values
-    pub fn filter_left(&self) -> Stream<L>
-    {
-        self.filter_map(|res| if res.is_left() { res.into_owned().left() } else { None })
-    }
-
-    /// Filters a stream of `Either`, returning the unwrapped `Right` values
-    pub fn filter_right(&self) -> Stream<R>
-    {
-        self.filter_map(|res| if res.is_right() { res.into_owned().right() } else { None })
+        self.filter_first()
     }
 }
 
 impl<T: SumType2 + Clone + 'static> Stream<T>
     where T::Type1: Clone + 'static, T::Type2: Clone + 'static
 {
+    /// Creates a stream with only the first element of a sum type
+    pub fn filter_first(&self) -> Stream<T::Type1>
+    {
+        self.filter_map(|res| if res.is_type1() { res.into_owned().into_type1() } else { None })
+    }
+
+    /// Creates a stream with only the second element of a sum type
+    pub fn filter_second(&self) -> Stream<T::Type2>
+    {
+        self.filter_map(|res| if res.is_type2() { res.into_owned().into_type2() } else { None })
+    }
+
     /// Splits a two element sum type stream into two streams with the unwrapped values
     pub fn split(&self) -> (Stream<T::Type1>, Stream<T::Type2>)
     {

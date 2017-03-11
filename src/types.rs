@@ -57,7 +57,9 @@ impl<T: Clone> Callbacks<T>
 pub trait Untyped {}
 impl<T> Untyped for T {}
 
-// generic sum type of size two
+/// Generic sum type of two elements.
+///
+/// It's used to provide generics over the `Option`/`Result`/`Either` types
 pub trait SumType2
 {
     type Type1;
@@ -71,6 +73,21 @@ pub trait SumType2
 
     fn into_type1(self) -> Option<Self::Type1>;
     fn into_type2(self) -> Option<Self::Type2>;
+}
+
+impl<T> SumType2 for Option<T>
+{
+    type Type1 = T;
+    type Type2 = ();
+
+    fn from_type1(val: Self::Type1) -> Self { Some(val) }
+    fn from_type2(_: Self::Type2) -> Self { None }
+
+    fn is_type1(&self) -> bool { self.is_some() }
+    fn is_type2(&self) -> bool { self.is_none() }
+
+    fn into_type1(self) -> Option<Self::Type1> { self }
+    fn into_type2(self) -> Option<Self::Type2> { self.ok_or(()).err() }
 }
 
 impl<T, E> SumType2 for Result<T, E>
