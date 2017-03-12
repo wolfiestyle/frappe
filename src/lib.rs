@@ -23,7 +23,7 @@ use either::Either;
 #[derive(Clone)]
 pub struct Sink<T: Clone>
 {
-    cbs: Rc<RefCell<Callbacks<T>>>,
+    cbs: Rc<Callbacks<T>>,
 }
 
 impl<T: Clone> Sink<T>
@@ -31,7 +31,7 @@ impl<T: Clone> Sink<T>
     /// Creates a new sink
     pub fn new() -> Self
     {
-        Sink{ cbs: Rc::new(RefCell::new(Callbacks::new())) }
+        Sink{ cbs: Rc::new(Callbacks::new()) }
     }
 
     /// Creates a Stream that receives the objects sent through this sink
@@ -43,17 +43,16 @@ impl<T: Clone> Sink<T>
     /// Send a value into the sink
     pub fn send(&self, val: T)
     {
-        self.cbs.borrow_mut().call(val)
+        self.cbs.call(val)
     }
 
     /// Sends values from an Iterator into the sink
     pub fn feed<I>(&self, iter: I)
         where I: IntoIterator<Item=T>
     {
-        let mut cbs = self.cbs.borrow_mut();
         for val in iter
         {
-            cbs.call(val)
+            self.cbs.call(val)
         }
     }
 }
@@ -62,7 +61,7 @@ impl<T: Clone> Sink<T>
 #[derive(Clone)]
 pub struct Stream<T: Clone>
 {
-    cbs: Rc<RefCell<Callbacks<T>>>,
+    cbs: Rc<Callbacks<T>>,
     source: Option<Rc<Untyped>>,  // strong reference to a parent Stream
 }
 
@@ -81,8 +80,8 @@ impl<T: Clone + 'static> Stream<T>
         where F: Fn(&T) -> bool + 'static
     {
         let (new_cbs, weak) = rc_and_weak(Callbacks::new());
-        self.cbs.borrow_mut().push(move |arg| {
-            with_weak(&weak, |cb| if pred(&arg) { cb.borrow_mut().call_cow(arg) })
+        self.cbs.push(move |arg| {
+            with_weak(&weak, |cb| if pred(&arg) { cb.call_cow(arg) })
         });
         Stream{ cbs: new_cbs, source: Some(Rc::new(self.clone())) }
     }
@@ -93,8 +92,8 @@ impl<T: Clone + 'static> Stream<T>
         R: Clone + 'static
     {
         let (new_cbs, weak) = rc_and_weak(Callbacks::new());
-        self.cbs.borrow_mut().push(move |arg| {
-            with_weak(&weak, |cb| if let Some(val) = f(arg) { cb.borrow_mut().call(val) })
+        self.cbs.push(move |arg| {
+            with_weak(&weak, |cb| if let Some(val) = f(arg) { cb.call(val) })
         });
         Stream{ cbs: new_cbs, source: Some(Rc::new(self.clone())) }
     }
@@ -104,11 +103,11 @@ impl<T: Clone + 'static> Stream<T>
     {
         let (new_cbs, weak1) = rc_and_weak(Callbacks::new());
         let weak2 = weak1.clone();
-        self.cbs.borrow_mut().push(move |arg| {
-            with_weak(&weak1, |cb| cb.borrow_mut().call_cow(arg))
+        self.cbs.push(move |arg| {
+            with_weak(&weak1, |cb| cb.call_cow(arg))
         });
-        other.cbs.borrow_mut().push(move |arg| {
-            with_weak(&weak2, |cb| cb.borrow_mut().call_cow(arg))
+        other.cbs.push(move |arg| {
+            with_weak(&weak2, |cb| cb.call_cow(arg))
         });
         Stream{ cbs: new_cbs, source: Some(Rc::new((self.clone(), other.clone()))) }
     }
@@ -123,11 +122,11 @@ impl<T: Clone + 'static> Stream<T>
         let weak2 = weak1.clone();
         let f1 = Rc::new(f);
         let f2 = f1.clone();
-        self.cbs.borrow_mut().push(move |arg| {
-            with_weak(&weak1, |cb| cb.borrow_mut().call(f1(Either::Left(arg))))
+        self.cbs.push(move |arg| {
+            with_weak(&weak1, |cb| cb.call(f1(Either::Left(arg))))
         });
-        other.cbs.borrow_mut().push(move |arg| {
-            with_weak(&weak2, |cb| cb.borrow_mut().call(f2(Either::Right(arg))))
+        other.cbs.push(move |arg| {
+            with_weak(&weak2, |cb| cb.call(f2(Either::Right(arg))))
         });
         Stream{ cbs: new_cbs, source: Some(Rc::new((self.clone(), other.clone()))) }
     }
@@ -136,7 +135,7 @@ impl<T: Clone + 'static> Stream<T>
     pub fn inspect<F>(self, f: F) -> Self
         where F: Fn(Cow<T>) + 'static
     {
-        self.cbs.borrow_mut().push(move |arg| { f(arg); true });
+        self.cbs.push(move |arg| { f(arg); true });
         self
     }
 
@@ -144,7 +143,7 @@ impl<T: Clone + 'static> Stream<T>
     pub fn channel(&self) -> mpsc::Receiver<T>
     {
         let (tx, rx) = mpsc::channel();
-        self.cbs.borrow_mut().push(move |arg| {
+        self.cbs.push(move |arg| {
             tx.send(arg.into_owned()).is_ok()
         });
         rx
@@ -160,8 +159,8 @@ impl<T: Clone + 'static> Stream<T>
     pub fn hold_if<F>(&self, initial: T, pred: F) -> Signal<T>
         where F: Fn(&T) -> bool + 'static
     {
-        let (storage, weak) = rc_and_weak(initial);
-        self.cbs.borrow_mut().push(move |arg| {
+        let (storage, weak) = rc_and_weak(RefCell::new(initial));
+        self.cbs.push(move |arg| {
             with_weak(&weak, |st| if pred(&arg) { *st.borrow_mut() = arg.into_owned() })
         });
         Signal{
@@ -175,8 +174,8 @@ impl<T: Clone + 'static> Stream<T>
         where F: Fn(A, Cow<T>) -> A + 'static,
         A: Clone + 'static
     {
-        let (storage, weak) = rc_and_weak(initial);
-        self.cbs.borrow_mut().push(move |arg| {
+        let (storage, weak) = rc_and_weak(RefCell::new(initial));
+        self.cbs.push(move |arg| {
             with_weak(&weak, |st| unsafe {
                 let acc = &mut *st.borrow_mut();
                 let old = ptr::read(acc);
@@ -220,10 +219,10 @@ impl<T: SumType2 + Clone + 'static> Stream<T>
     {
         let (cbs_1, weak_1) = rc_and_weak(Callbacks::new());
         let (cbs_2, weak_2) = rc_and_weak(Callbacks::new());
-        self.cbs.borrow_mut().push(move |result| {
+        self.cbs.push(move |result| {
             match (result.is_type1(), weak_1.upgrade(), weak_2.upgrade()) {
-                (true, Some(cb), _) => { cb.borrow_mut().call(result.into_owned().into_type1().unwrap()); true },
-                (false, _, Some(cb)) => { cb.borrow_mut().call(result.into_owned().into_type2().unwrap()); true },
+                (true, Some(cb), _) => { cb.call(result.into_owned().into_type1().unwrap()); true },
+                (false, _, Some(cb)) => { cb.call(result.into_owned().into_type2().unwrap()); true },
                 (_, None, None) => return false,  // both output steams dropped, drop this callback
                 _ => true,  // sent to a dropped stream, but the other is still alive. keep this callback
             }
@@ -241,8 +240,8 @@ impl<T: Clone + 'static> Stream<Stream<T>>
     pub fn switch(&self) -> Stream<T>
     {
         let (new_cbs, weak) = rc_and_weak(Callbacks::new());
-        let mut storage = Rc::new(());
-        self.cbs.borrow_mut().push(move |stream| {
+        let storage = RefCell::new(Rc::new(()));
+        self.cbs.push(move |stream| {
             // check if the ouput stream is still alive
             if weak.upgrade().is_none() { return false }
             let cbs_w = weak.clone();
@@ -250,12 +249,12 @@ impl<T: Clone + 'static> Stream<Stream<T>>
             let lifetime = Rc::new(());
             let lifetime_w = Rc::downgrade(&lifetime);
             // drop the previous Rc so it unlinks from the output stream
-            storage = lifetime;
+            *storage.borrow_mut() = lifetime;
             // redirect the inner stream to the output stream
-            stream.cbs.borrow_mut().push(move |arg| {
+            stream.cbs.push(move |arg| {
                 lifetime_w.upgrade() // check if we're still linked to this stream
                     .and_then(|_| cbs_w.upgrade()) // check if output stream still alive
-                    .map(|cb| cb.borrow_mut().call_cow(arg))
+                    .map(|cb| cb.call_cow(arg))
                     .is_some()
             });
             true

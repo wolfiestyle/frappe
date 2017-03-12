@@ -1,49 +1,77 @@
 use std::borrow::Cow;
-use helpers::retain_mut;
+use std::cell::{Cell, RefCell};
 
-// callbacks use a Cow<T> argument so we can choose at runtime if
-// we will send a ref or an owned value
+// function that becomes uncallable after it returns false.
+// callbacks use a Cow<T> argument so we can choose at runtime if we will send a ref or an owned value
+struct FnCell<T: Clone>
+{
+    f: Box<Fn(Cow<T>) -> bool>,
+    alive: Cell<bool>,
+}
+
+impl<T: Clone> FnCell<T>
+{
+    fn new<F>(f: F) -> Self
+        where F: Fn(Cow<T>) -> bool + 'static
+    {
+        FnCell{ f: Box::new(f), alive: Cell::new(true) }
+    }
+
+    fn call(&self, arg: Cow<T>)
+    {
+        if self.alive.get() && !(self.f)(arg)
+        {
+            self.alive.set(false);
+        }
+    }
+}
+
 pub struct Callbacks<T: Clone>
 {
-    fs: Vec<Box<FnMut(Cow<T>) -> bool>>,
+    fs: RefCell<Vec<FnCell<T>>>,
 }
 
 impl<T: Clone> Callbacks<T>
 {
     pub fn new() -> Self
     {
-        Callbacks{ fs: Vec::new() }
+        Callbacks{ fs: RefCell::new(Vec::new()) }
     }
 
-    pub fn push<F>(&mut self, cb: F)
-        where F: FnMut(Cow<T>) -> bool + 'static
+    pub fn push<F>(&self, cb: F)
+        where F: Fn(Cow<T>) -> bool + 'static
     {
-        self.fs.push(Box::new(cb))
+        self.fs.borrow_mut().push(FnCell::new(cb))
     }
 
     // sends a ref to the first N-1 callbacks, and the owned value to the last
     // this way we prevent tons of cloning
-    pub fn call(&mut self, arg: T)
+    pub fn call(&self, arg: T)
     {
-        let maybe_last = self.fs.pop();
-        self.call_ref(&arg);
-
-        if let Some(mut last) = maybe_last
+        let fs = self.fs.borrow();
+        let n = fs.len();
+        let mut i = 0;
+        for _ in 1..n
         {
-            if last(Cow::Owned(arg))
-            {
-                self.fs.push(last);
-            }
+            fs[i].call(Cow::Borrowed(&arg));
+            i += 1;
+        }
+        if n > 0
+        {
+            fs[i].call(Cow::Owned(arg));
         }
     }
 
-    fn call_ref(&mut self, arg: &T)
+    fn call_ref(&self, arg: &T)
     {
-        retain_mut(&mut self.fs, |f| f(Cow::Borrowed(arg)))
+        for f in self.fs.borrow().iter()
+        {
+            f.call(Cow::Borrowed(arg))
+        }
     }
 
     // we use this to passthrough an unprocessed value
-    pub fn call_cow(&mut self, arg: Cow<T>)
+    pub fn call_cow(&self, arg: Cow<T>)
     {
         match arg
         {

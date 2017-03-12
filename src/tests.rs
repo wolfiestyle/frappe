@@ -186,3 +186,48 @@ fn filter_extra()
     assert_eq!(s_pos.sample(), [1, 8, 42]);
     assert_eq!(s_neg.sample(), [-3, -66]);
 }
+
+#[test]
+fn reentrant()
+{
+    let sink = Sink::new();
+    let cloned = sink.clone();
+    let sig = sink.stream()
+        .filter_map(move |n| if *n < 10 { cloned.send(*n + 1); None } else { Some(*n) })
+        .hold(0);
+
+    sink.send(1);
+    assert_eq!(sig.sample(), 10);
+}
+
+#[allow(unused_variables)]
+#[test]
+fn deletion()
+{
+    use std::cell::Cell;
+
+    fn stream_cell(src: &Stream<i32>, i: i32) -> (Stream<i32>, Rc<Cell<i32>>)
+    {
+        let cell = Rc::new(Cell::new(0));
+        let cloned = cell.clone();
+        let stream = src.map(move |n| *n + i).inspect(move |n| cloned.set(*n));
+        (stream, cell)
+    }
+
+    let sink = Sink::new();
+    let stream = sink.stream();
+    let (s1, c1) = stream_cell(&stream, 1);
+    let (s2, c2) = stream_cell(&stream, 2);
+    let (s3, c3) = stream_cell(&stream, 3);
+
+    sink.send(10);
+    assert_eq!(c1.get(), 11);
+    assert_eq!(c2.get(), 12);
+    assert_eq!(c3.get(), 13);
+
+    drop(s2);
+    sink.send(20);
+    assert_eq!(c1.get(), 21);
+    assert_eq!(c2.get(), 12);
+    assert_eq!(c3.get(), 23);
+}
