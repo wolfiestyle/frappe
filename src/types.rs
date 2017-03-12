@@ -1,5 +1,10 @@
 use std::borrow::Cow;
 use std::cell::{Cell, RefCell};
+use helpers::retain_swap;
+
+// amount of dropped callbacks allowed to stay before initiating a cleanup
+// (arbitrary value, hasn't been performance tuned)
+const GC_THRESHOLD: usize = 5;
 
 // function that becomes uncallable after it returns false.
 // callbacks use a Cow<T> argument so we can choose at runtime if we will send a ref or an owned value
@@ -17,15 +22,24 @@ impl<T: Clone> FnCell<T>
         FnCell{ f: Box::new(f), alive: Cell::new(true) }
     }
 
-    fn call(&self, arg: Cow<T>)
+    fn call(&self, arg: Cow<T>) -> bool
     {
-        if self.alive.get() && !(self.f)(arg)
+        let is_alive = self.alive.get();
+        if is_alive && !(self.f)(arg)
         {
             self.alive.set(false);
+            return false
         }
+        is_alive
+    }
+
+    fn is_alive(&self) -> bool
+    {
+        self.alive.get()
     }
 }
 
+// a collection of callbacks
 pub struct Callbacks<T: Clone>
 {
     fs: RefCell<Vec<FnCell<T>>>,
@@ -50,24 +64,30 @@ impl<T: Clone> Callbacks<T>
     {
         let fs = self.fs.borrow();
         let n = fs.len();
+
         let mut i = 0;
+        let mut n_dead = 0;
         for _ in 1..n
         {
-            fs[i].call(Cow::Borrowed(&arg));
+            if !fs[i].call(Cow::Borrowed(&arg)) { n_dead += 1 }
             i += 1;
         }
         if n > 0
         {
-            fs[i].call(Cow::Owned(arg));
+            if !fs[i].call(Cow::Owned(arg)) { n_dead += 1 }
         }
+        drop(fs);
+
+        if n_dead > GC_THRESHOLD { self.cleanup(); }
     }
 
     fn call_ref(&self, arg: &T)
     {
-        for f in self.fs.borrow().iter()
-        {
-            f.call(Cow::Borrowed(arg))
-        }
+        let n_dead = self.fs.borrow().iter().fold(0, |a, f| {
+            if f.call(Cow::Borrowed(arg)) { a } else { a + 1 }
+        });
+
+        if n_dead > GC_THRESHOLD { self.cleanup(); }
     }
 
     // we use this to passthrough an unprocessed value
@@ -77,6 +97,15 @@ impl<T: Clone> Callbacks<T>
         {
             Cow::Borrowed(r) => self.call_ref(r),
             Cow::Owned(v) => self.call(v),
+        }
+    }
+
+    // removes the dead callbacks
+    fn cleanup(&self)
+    {
+        if let Ok(mut fs) = self.fs.try_borrow_mut()
+        {
+            retain_swap(&mut fs, FnCell::is_alive);
         }
     }
 }
