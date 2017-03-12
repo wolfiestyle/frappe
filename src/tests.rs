@@ -95,15 +95,14 @@ fn stream_channel()
     let rx = sink.stream().channel();
 
     let thread = std::thread::spawn(move || {
-        let mut sum = 0;
-        while let Some(val) = rx.recv().unwrap()
-        {
-            sum += val;
-        }
-        sum
+        let sink2 = Sink::new();
+        let s_sum = sink2.stream().fold(0, |a, n| a + *n);
+        while let Ok(_) = rx.recv().map(|v| sink2.send(v)) { /* empty */ }
+        s_sum.sample()
     });
-    sink.feed((1..100).map(Some));
-    sink.send(None);
+
+    sink.feed(1..100);
+    drop(sink);
 
     let result = thread.join().unwrap();
     assert_eq!(result, 4950);
