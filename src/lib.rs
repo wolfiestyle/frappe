@@ -8,9 +8,10 @@ use std::cell::{Cell, RefCell};
 use std::borrow::Cow;
 use std::ptr;
 use std::sync::mpsc;
+use std::any::Any;
 
 mod types;
-use types::{Callbacks, Untyped};
+use types::Callbacks;
 pub use types::SumType2;
 
 mod helpers;
@@ -62,7 +63,7 @@ impl<T: Clone> Sink<T>
 pub struct Stream<T: Clone>
 {
     cbs: Rc<Callbacks<T>>,
-    source: Option<Rc<Untyped>>,  // strong reference to a parent Stream
+    source: Option<Rc<Any>>,  // strong reference to a parent Stream
 }
 
 impl<T: Clone + 'static> Stream<T>
@@ -260,7 +261,7 @@ impl<T: Clone + 'static> Stream<Stream<T>>
 pub enum Signal<T>
 {
     Constant(Rc<T>),
-    Shared(Rc<RefCell<T>>, Rc<Untyped>),
+    Shared(Rc<RefCell<T>>, Rc<Any>),
     Dynamic(Rc<Fn() -> T>),
     Nested(Rc<Fn() -> Signal<T>>),
 }

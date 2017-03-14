@@ -110,10 +110,6 @@ impl<T: Clone> Callbacks<T>
     }
 }
 
-// type erasure
-pub trait Untyped {}
-impl<T> Untyped for T {}
-
 /// Generic sum type of two elements.
 ///
 /// It's used to provide generics over the `Option`/`Result`/`Either` types
