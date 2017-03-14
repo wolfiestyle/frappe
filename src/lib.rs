@@ -4,7 +4,7 @@
 pub extern crate either;
 
 use std::rc::Rc;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::borrow::Cow;
 use std::ptr;
 use std::sync::mpsc;
@@ -236,22 +236,18 @@ impl<T: Clone + 'static> Stream<Stream<T>>
     pub fn switch(&self) -> Stream<T>
     {
         let (new_cbs, weak) = rc_and_weak(Callbacks::new());
-        let storage = RefCell::new(Rc::new(()));
+        let id = Rc::new(Cell::new(0u64));  // id of each stream sent
         self.cbs.push(move |stream| {
-            // check if the ouput stream is still alive
             if weak.upgrade().is_none() { return false }
             let cbs_w = weak.clone();
-            // this represents the connection between this stream and the output
-            let lifetime = Rc::new(());
-            let lifetime_w = Rc::downgrade(&lifetime);
-            // drop the previous Rc so it unlinks from the output stream
-            *storage.borrow_mut() = lifetime;
+            let cur_id = id.clone();
+            // increment the id so it will only send to the last stream
+            let my_id = id.get() + 1;
+            id.set(my_id);
             // redirect the inner stream to the output stream
             stream.cbs.push(move |arg| {
-                lifetime_w.upgrade() // check if we're still linked to this stream
-                    .and_then(|_| cbs_w.upgrade()) // check if output stream still alive
-                    .map(|cb| cb.call_cow(arg))
-                    .is_some()
+                if my_id != cur_id.get() { return false }
+                with_weak(&cbs_w, |cb| cb.call_cow(arg))
             });
             true
         });
