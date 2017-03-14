@@ -163,10 +163,8 @@ impl<T: Clone + 'static> Stream<T>
         self.cbs.push(move |arg| {
             with_weak(&weak, |st| if pred(&arg) { *st.borrow_mut() = arg.into_owned() })
         });
-        Signal{
-            val: SigVal::Shared(storage),
-            source: Some(Rc::new(self.clone()))
-        }
+
+        Signal::Shared(storage, Rc::new(self.clone()))
     }
 
     /// Accumulates the values sent over this stream
@@ -183,10 +181,8 @@ impl<T: Clone + 'static> Stream<T>
                 ptr::write(acc, new);
             })
         });
-        Signal{
-            val: SigVal::Shared(storage),
-            source: Some(Rc::new(self.clone()))
-        }
+
+        Signal::Shared(storage, Rc::new(self.clone()))
     }
 }
 
@@ -263,30 +259,14 @@ impl<T: Clone + 'static> Stream<Stream<T>>
     }
 }
 
-#[derive(Clone)]
-enum SigVal<T>
-{
-    Constant(Rc<T>),
-    Shared(Rc<RefCell<T>>),
-    Dynamic(Rc<Fn() -> T>),
-    Nested(Rc<Fn() -> Signal<T>>),
-}
-
-impl<T> SigVal<T>
-{
-    fn from_fn<F>(f: F) -> Self
-        where F: Fn() -> T + 'static
-    {
-        SigVal::Dynamic(Rc::new(f))
-    }
-}
-
 /// Represents a continuous value that changes over time
 #[derive(Clone)]
-pub struct Signal<T>
+pub enum Signal<T>
 {
-    val: SigVal<T>,
-    source: Option<Rc<Untyped>>,
+    Constant(Rc<T>),
+    Shared(Rc<RefCell<T>>, Rc<Untyped>),
+    Dynamic(Rc<Fn() -> T>),
+    Nested(Rc<Fn() -> Signal<T>>),
 }
 
 impl<T: Clone> Signal<T>
@@ -295,26 +275,26 @@ impl<T: Clone> Signal<T>
     pub fn constant<U>(val: U) -> Self
         where U: Into<Rc<T>>
     {
-        Signal{ val: SigVal::Constant(val.into()), source: None }
+        Signal::Constant(val.into())
     }
 
     /// Creates a signal that samples it's values from a function
     pub fn from_fn<F>(f: F) -> Self
         where F: Fn() -> T + 'static
     {
-        Signal{ val: SigVal::from_fn(f), source: None }
+        Signal::Dynamic(Rc::new(f))
     }
 
     /// Sample by value.
     /// This clones the content of the signal
     pub fn sample(&self) -> T
     {
-        match self.val
+        match *self
         {
-            SigVal::Constant(ref v) => (**v).clone(),
-            SigVal::Shared(ref s) => s.borrow().clone(),
-            SigVal::Dynamic(ref f) => f(),
-            SigVal::Nested(ref sig) => sig().sample(),
+            Signal::Constant(ref v) => (**v).clone(),
+            Signal::Shared(ref s, _) => s.borrow().clone(),
+            Signal::Dynamic(ref f) => f(),
+            Signal::Nested(ref sig) => sig().sample(),
         }
     }
 
@@ -325,12 +305,12 @@ impl<T: Clone> Signal<T>
     pub fn sample_with<F, R>(&self, cb: F) -> R
         where F: FnOnce(Cow<T>) -> R
     {
-        match self.val
+        match *self
         {
-            SigVal::Constant(ref v) => cb(Cow::Borrowed(v)),
-            SigVal::Shared(ref s) => cb(Cow::Borrowed(&s.borrow())),
-            SigVal::Dynamic(ref f) => cb(Cow::Owned(f())),
-            SigVal::Nested(ref sig) => sig().sample_with(cb),
+            Signal::Constant(ref v) => cb(Cow::Borrowed(v)),
+            Signal::Shared(ref s, _) => cb(Cow::Borrowed(&s.borrow())),
+            Signal::Dynamic(ref f) => cb(Cow::Owned(f())),
+            Signal::Nested(ref sig) => sig().sample_with(cb),
         }
     }
 
@@ -340,10 +320,7 @@ impl<T: Clone> Signal<T>
         R: Clone, T: 'static
     {
         let this = self.clone();
-        Signal{
-            val: SigVal::from_fn(move || this.sample_with(|val| f(val))),
-            source: None
-        }
+        Signal::from_fn(move || this.sample_with(|val| f(val)))
     }
 
     /// Takes a snapshot of this signal every time the trigger stream fires
@@ -362,10 +339,7 @@ impl <T: Clone + 'static> Signal<Signal<T>>
     pub fn switch(&self) -> Signal<T>
     {
         let this = self.clone();
-        Signal{
-            val: SigVal::Nested(Rc::new(move || this.sample())),
-            source: None
-        }
+        Signal::Nested(Rc::new(move || this.sample()))
     }
 }
 
