@@ -9,6 +9,7 @@ use std::borrow::Cow;
 use std::ptr;
 use std::sync::{mpsc, Arc, RwLock};
 use std::any::Any;
+use std::ops::Deref;
 
 mod types;
 use types::Callbacks;
@@ -323,7 +324,7 @@ impl<T: Clone + 'static> Signal<T> for SignalConst<T>
 {
     fn sample(&self) -> T
     {
-        (*self.0).clone()
+        self.0.deref().clone()
     }
 
     fn sample_with<F, R>(&self, cb: F) -> R
@@ -338,6 +339,16 @@ impl<T, U: Into<Rc<T>>> From<U> for SignalConst<T>
     fn from(val: U) -> Self
     {
         SignalConst::new(val)
+    }
+}
+
+impl<T> Deref for SignalConst<T>
+{
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target
+    {
+        self.0.deref()
     }
 }
 
