@@ -171,7 +171,7 @@ impl<T: Clone + 'static> Stream<T>
                 .is_some()
         });
 
-        SignalShared(storage, Rc::new(self.clone()))
+        SignalShared(storage, Some(Rc::new(self.clone())))
     }
 
     /// Accumulates the values sent over this stream
@@ -192,7 +192,7 @@ impl<T: Clone + 'static> Stream<T>
                 .is_some()
         });
 
-        SignalShared(storage, Rc::new(self.clone()))
+        SignalShared(storage, Some(Rc::new(self.clone())))
     }
 }
 
@@ -346,7 +346,7 @@ impl<T, U: Into<Rc<T>>> From<U> for SignalConst<T>
 /// This is produced by stream methods that create a signal.
 /// It also contains a reference to it's parent stream to avoid it's deletion.
 #[derive(Clone)]
-pub struct SignalShared<T>(Arc<RwLock<T>>, Rc<Any>);
+pub struct SignalShared<T>(Arc<RwLock<T>>, Option<Rc<Any>>);
 
 impl<T> SignalShared<T>
 {
@@ -379,7 +379,7 @@ impl<T> From<Arc<RwLock<T>>> for SignalShared<T>
 {
     fn from(val: Arc<RwLock<T>>) -> Self
     {
-        SignalShared(val, Rc::new(()))
+        SignalShared(val, None)
     }
 }
 
