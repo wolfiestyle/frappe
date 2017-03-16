@@ -4,10 +4,10 @@
 pub extern crate either;
 
 use std::rc::Rc;
-use std::cell::{Cell, RefCell};
+use std::cell::Cell;
 use std::borrow::Cow;
 use std::ptr;
-use std::sync::mpsc;
+use std::sync::{mpsc, Arc, RwLock};
 use std::any::Any;
 
 mod types;
@@ -160,9 +160,12 @@ impl<T: Clone + 'static> Stream<T>
     pub fn hold_if<F>(&self, initial: T, pred: F) -> SignalShared<T>
         where F: Fn(&T) -> bool + 'static
     {
-        let (storage, weak) = rc_and_weak(RefCell::new(initial));
+        let storage = Arc::new(RwLock::new(initial));
+        let weak = Arc::downgrade(&storage);
         self.cbs.push(move |arg| {
-            with_weak(&weak, |st| if pred(&arg) { *st.borrow_mut() = arg.into_owned() })
+            weak.upgrade()
+                .map(|st| if pred(&arg) { *st.write().unwrap() = arg.into_owned() })
+                .is_some()
         });
 
         SignalShared(storage, Rc::new(self.clone()))
@@ -173,14 +176,17 @@ impl<T: Clone + 'static> Stream<T>
         where F: Fn(A, Cow<T>) -> A + 'static,
         A: Clone + 'static
     {
-        let (storage, weak) = rc_and_weak(RefCell::new(initial));
+        let storage = Arc::new(RwLock::new(initial));
+        let weak = Arc::downgrade(&storage);
         self.cbs.push(move |arg| {
-            with_weak(&weak, |st| unsafe {
-                let acc = &mut *st.borrow_mut();
-                let old = ptr::read(acc);
-                let new = f(old, arg);
-                ptr::write(acc, new);
-            })
+            weak.upgrade()
+                .map(|st| unsafe {
+                    let acc = &mut *st.write().unwrap();
+                    let old = ptr::read(acc);
+                    let new = f(old, arg);
+                    ptr::write(acc, new);
+                })
+                .is_some()
         });
 
         SignalShared(storage, Rc::new(self.clone()))
@@ -337,12 +343,16 @@ impl<T, U: Into<Rc<T>>> From<U> for SignalConst<T>
 /// This is produced by stream methods that create a signal.
 /// It also contains a reference to it's parent stream to avoid it's deletion.
 #[derive(Clone)]
-pub struct SignalShared<T>(Rc<RefCell<T>>, Rc<Any>);
+pub struct SignalShared<T>(Arc<RwLock<T>>, Rc<Any>);
 
 impl<T> SignalShared<T>
 {
-    /// Returns the internal shared value
-    pub fn into_inner(self) -> Rc<RefCell<T>>
+    /// Returns the internal shared value.
+    ///
+    /// The returned value can be moved across threads and converted back into a `SignalShared`.
+    /// This also drops the reference to it's parent signal, so it can delete the signal
+    /// chain as a side effect
+    pub fn into_inner(self) -> Arc<RwLock<T>>
     {
         self.0
     }
@@ -352,19 +362,19 @@ impl<T: Clone + 'static> Signal<T> for SignalShared<T>
 {
     fn sample(&self) -> T
     {
-        self.0.borrow().clone()
+        self.0.read().unwrap().clone()
     }
 
     fn sample_with<F, R>(&self, cb: F) -> R
         where F: FnOnce(Cow<T>) -> R
     {
-        cb(Cow::Borrowed(&self.0.borrow()))
+        cb(Cow::Borrowed(&self.0.read().unwrap()))
     }
 }
 
-impl<T> From<Rc<RefCell<T>>> for SignalShared<T>
+impl<T> From<Arc<RwLock<T>>> for SignalShared<T>
 {
-    fn from(val: Rc<RefCell<T>>) -> Self
+    fn from(val: Arc<RwLock<T>>) -> Self
     {
         SignalShared(val, Rc::new(()))
     }

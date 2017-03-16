@@ -98,14 +98,14 @@ fn stream_channel()
         let sink2 = Sink::new();
         let s_sum = sink2.stream().fold(0, |a, n| a + *n);
         while let Ok(_) = rx.recv().map(|v| sink2.send(v)) { /* empty */ }
-        s_sum.sample()
+        s_sum.into_inner()
     });
 
     sink.feed(1..100);
     drop(sink);
 
-    let result = thread.join().unwrap();
-    assert_eq!(result, 4950);
+    let result: SignalShared<_> = thread.join().unwrap().into();
+    assert_eq!(result.sample(), 4950);
 }
 
 #[test]
