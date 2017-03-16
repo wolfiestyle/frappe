@@ -276,7 +276,7 @@ pub trait Signal<T>: Clone + 'static
     /// Sample by reference.
     ///
     /// This is meant to be the most efficient way when cloning is undesirable,
-    /// but it requires a callback to prevent outliving the internal `RefCell` borrow
+    /// but it requires a callback to prevent outliving internal `RwLock` borrows
     fn sample_with<F, R>(&self, cb: F) -> R
         where F: FnOnce(Cow<T>) -> R;
 
@@ -494,7 +494,7 @@ impl<T: Clone + 'static> Signal<T> for SignalAny<T>
     }
 }
 
-impl<T: Clone, U: Into<Rc<T>>> From<U> for SignalAny<T>
+impl<T, U: Into<Rc<T>>> From<U> for SignalAny<T>
 {
     fn from(val: U) -> Self
     {
