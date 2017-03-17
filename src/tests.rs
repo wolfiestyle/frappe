@@ -51,7 +51,7 @@ fn stream_operations()
     let stream = sink.stream();
 
     let s_string = stream.map(|a| a.to_string()).fold(vec![], vec_cons);
-    let s_odd = stream.filter(|a| *a % 2 != 0).fold(vec![], vec_cons);
+    let s_odd = stream.filter(|a| a % 2 != 0).fold(vec![], vec_cons);
     let s_even_half = stream.filter_map(|a| if *a % 2 == 0 { Some(*a / 2) } else { None }).fold(vec![], vec_cons);
     let (pos, neg) = stream.map(|a| if *a > 0 { Ok(*a) } else { Err(*a) }).split();
     let s_pos = pos.fold(vec![], vec_cons);
