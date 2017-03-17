@@ -26,7 +26,7 @@ fn main()
     // or multiple at once
     sink.feed(10..15);
 
-    // `sample` get a copy of the value stored in the signal
+    // `sample` gets a copy of the value stored in the signal
     println!("last: {}", last.sample());
     println!("sum: {}", sum.sample());
     // `sample_with` gets a reference to the interval value, no clone needed

@@ -1,6 +1,6 @@
 # frappe - FRP library for Rust
 
-Functional Reactive Programming library based on [Carboxyl](https://github.com/aepsil0n/carboxyl).
+Functional Reactive Programming library inspired by [Carboxyl](https://github.com/aepsil0n/carboxyl).
 It's designed to efficiently pass objects around by avoiding cloning as much as possible.
 
 ## Usage
@@ -34,7 +34,7 @@ fn main()
     // or multiple at once
     sink.feed(10..15);
 
-    // `sample` get a copy of the value stored in the signal
+    // `sample` gets a copy of the value stored in the signal
     println!("last: {}", last.sample());
     println!("sum: {}", sum.sample());
     // `sample_with` gets a reference to the interval value, no clone needed
