@@ -1,11 +1,3 @@
-# frappe - FRP library for Rust
-
-Functional Reactive Programming library based on [Carboxyl](https://github.com/aepsil0n/carboxyl).
-It's designed to efficiently pass objects around by avoiding cloning as much as possible.
-
-## Usage
-
-```Rust
 extern crate frappe;
 use frappe::{Sink, Signal};
 
@@ -40,4 +32,3 @@ fn main()
     // `sample_with` gets a reference to the interval value, no clone needed
     half_even.sample_with(|v| println!("half_even: {:?}", v));
 }
-```
