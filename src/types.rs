@@ -110,6 +110,33 @@ impl<T: Clone> Callbacks<T>
     }
 }
 
+/// Describes an asynchronous operation.
+///
+/// Frappe doesn't implement concurrency directly. This serves as an interface to
+/// an external async IO implementation, thread pool or similar so you can run slow
+/// parts of the stream chain without blocking the main thread.
+///
+/// Implementations should run the task asynchronously, possibly on another thread,
+/// and deliver the result to the main thread via some kind of event loop.
+pub trait AsyncTask
+{
+    /// Value from the source stream
+    type Input;
+    /// Result that gets sent to the output stream
+    type Output;
+    /// Handle to the main loop, thread pool or whatever resource is needed.
+    type Handler;
+
+    /// Runs the operation with the supplied input.
+    ///
+    /// The result has to be returned by calling the supplied `ret` closure.
+    /// The closure will return `true` if the value was successfully delivered,
+    /// or `false` if the output stream is gone.
+    /// This closure must be called in the same thread where the destination stream lives.
+    fn run<F>(&self, handler: &Self::Handler, input: Self::Input, ret: F)
+        where F: Fn(Self::Output) -> bool + 'static;
+}
+
 /// Generic sum type of two elements.
 ///
 /// It's used to provide generics over the `Option`/`Result`/`Either` types

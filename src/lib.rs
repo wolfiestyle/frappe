@@ -13,7 +13,7 @@ use std::ops::Deref;
 
 mod types;
 use types::Callbacks;
-pub use types::SumType2;
+pub use types::{SumType2, AsyncTask};
 
 mod helpers;
 use helpers::{rc_and_weak, with_weak};
@@ -194,6 +194,20 @@ impl<T: Clone + 'static> Stream<T>
         });
 
         SignalShared(storage, Some(Rc::new(self.clone())))
+    }
+
+    /// Executes an async operation on each value sent to this stream
+    pub fn map_async<A, R>(&self, handler: A::Handler, task: A) -> Stream<R>
+        where A: AsyncTask<Input=T, Output=R> + 'static, R: Clone + 'static
+    {
+        let (new_cbs, weak) = rc_and_weak(Callbacks::new());
+        self.cbs.push(move |arg| {
+            if weak.upgrade().is_none() { return false }
+            let cbs_w = weak.clone();
+            task.run(&handler, arg.into_owned(), move |res| with_weak(&cbs_w, |cb| cb.call(res)));
+            true
+        });
+        Stream{ cbs: new_cbs, source: Some(Rc::new(self.clone())) }
     }
 }
 
