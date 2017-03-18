@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::cell::{Cell, RefCell};
+use std::fmt;
 use helpers::retain_swap;
 
 // amount of dropped callbacks allowed to stay before initiating a cleanup
@@ -39,7 +40,16 @@ impl<T: Clone> FnCell<T>
     }
 }
 
+impl<T: Clone> fmt::Debug for FnCell<T>
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result
+    {
+        write!(f, "FnCell{{ alive: {} }}", self.alive.get())
+    }
+}
+
 // a collection of callbacks
+#[derive(Debug)]
 pub struct Callbacks<T: Clone>
 {
     fs: RefCell<Vec<FnCell<T>>>,
