@@ -324,16 +324,7 @@ pub trait Signal<T>: Clone + 'static
 
 /// A signal with constant value
 #[derive(Debug, Clone)]
-pub struct SignalConst<T>(T);
-
-impl<T> SignalConst<T>
-{
-    /// Creates a signal with a constant value
-    pub fn new(val: T) -> Self
-    {
-        SignalConst(val)
-    }
-}
+pub struct SignalConst<T>(pub T);
 
 impl<T: Clone + 'static> Signal<T> for SignalConst<T>
 {
@@ -353,7 +344,7 @@ impl<T> From<T> for SignalConst<T>
 {
     fn from(val: T) -> Self
     {
-        SignalConst::new(val)
+        SignalConst(val)
     }
 }
 
@@ -489,7 +480,7 @@ impl<T> SignalAny<T>
 {
     pub fn constant(val: T) -> Self
     {
-        SignalAny::Constant(SignalConst::new(val))
+        SignalAny::Constant(SignalConst(val))
     }
 
     pub fn from_fn<F>(f: F) -> Self
