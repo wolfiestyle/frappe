@@ -323,14 +323,14 @@ pub trait Signal<T>: Clone + 'static
 
 /// A signal with constant value
 #[derive(Clone)]
-pub struct SignalConst<T>(Rc<T>);
+pub struct SignalConst<T>(T);
 
 impl<T> SignalConst<T>
 {
     /// Creates a signal with a constant value
-    pub fn new<U: Into<Rc<T>>>(val: U) -> Self
+    pub fn new(val: T) -> Self
     {
-        SignalConst(val.into())
+        SignalConst(val)
     }
 }
 
@@ -338,7 +338,7 @@ impl<T: Clone + 'static> Signal<T> for SignalConst<T>
 {
     fn sample(&self) -> T
     {
-        self.0.deref().clone()
+        self.0.clone()
     }
 
     fn sample_with<F, R>(&self, cb: F) -> R
@@ -348,9 +348,9 @@ impl<T: Clone + 'static> Signal<T> for SignalConst<T>
     }
 }
 
-impl<T, U: Into<Rc<T>>> From<U> for SignalConst<T>
+impl<T> From<T> for SignalConst<T>
 {
-    fn from(val: U) -> Self
+    fn from(val: T) -> Self
     {
         SignalConst::new(val)
     }
@@ -362,7 +362,7 @@ impl<T> Deref for SignalConst<T>
 
     fn deref(&self) -> &Self::Target
     {
-        self.0.deref()
+        &self.0
     }
 }
 
@@ -470,7 +470,7 @@ pub enum SignalAny<T>
 
 impl<T> SignalAny<T>
 {
-    pub fn constant<U: Into<Rc<T>>>(val: U) -> Self
+    pub fn constant(val: T) -> Self
     {
         SignalAny::Constant(SignalConst::new(val))
     }
@@ -508,9 +508,9 @@ impl<T: Clone + 'static> Signal<T> for SignalAny<T>
     }
 }
 
-impl<T, U: Into<Rc<T>>> From<U> for SignalAny<T>
+impl<T> From<T> for SignalAny<T>
 {
-    fn from(val: U) -> Self
+    fn from(val: T) -> Self
     {
         SignalAny::constant(val)
     }
