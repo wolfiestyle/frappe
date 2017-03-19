@@ -142,7 +142,10 @@ pub trait AsyncTask
     /// The result has to be returned by calling the supplied `ret` closure.
     /// The closure will return `true` if the value was successfully delivered,
     /// or `false` if the output stream is gone.
+    ///
     /// This closure must be called in the same thread where the destination stream lives.
+    /// Also it can be called multiple times to deliver more than one result. This can
+    /// be useful to report the progress of the operation.
     fn run<F>(&self, handler: &Self::Handler, input: Self::Input, ret: F)
         where F: Fn(Self::Output) -> bool + 'static;
 }
