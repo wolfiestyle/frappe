@@ -212,6 +212,24 @@ impl<T: Clone + 'static> Stream<T>
         });
         Stream{ cbs: new_cbs, source: Some(Rc::new(self.clone())) }
     }
+
+    /// Maps each stream event to `0..N` output values.
+    ///
+    /// The closure must return it's value by sending it through the provided sink.
+    /// Multiple values (or none) can be sent to the output stream this way.
+    ///
+    /// This primitive is useful to construct asynchronous operations, since you can
+    /// store the sink for later usage.
+    pub fn map_n<F, R>(&self, f: F) -> Stream<R>
+        where F: Fn(Cow<T>, Sink<R>) + 'static,
+        R: Clone + 'static
+    {
+        let (new_cbs, weak) = rc_and_weak(Callbacks::new());
+        self.cbs.push(move |arg| {
+            with_weak(&weak, |cb| f(arg, Sink{ cbs: cb }))
+        });
+        Stream{ cbs: new_cbs, source: Some(Rc::new(self.clone())) }
+    }
 }
 
 impl<T: Clone + 'static> Stream<Option<T>>

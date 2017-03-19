@@ -231,3 +231,16 @@ fn deletion()
     assert_eq!(c2.get(), 12);
     assert_eq!(c3.get(), 23);
 }
+
+#[test]
+fn map_n()
+{
+    let sink = Sink::new();
+    let s_out = sink.stream()
+        .map_n(|a, sink| for _ in 0 .. *a { sink.send(*a) })
+        .fold(vec![], vec_cons);
+
+    sink.feed(0..4);
+
+    assert_eq!(s_out.sample(), [1, 2, 2, 3, 3, 3]);
+}
