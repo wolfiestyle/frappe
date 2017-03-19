@@ -1,44 +1,11 @@
 extern crate frappe;
-use frappe::{Sink, Signal, AsyncTask};
+use frappe::{Sink, Signal};
 
 use std::rc::Rc;
 use std::cell::RefCell;
-use std::sync::{mpsc, Arc};
+use std::sync::mpsc;
 use std::thread::{self, Thread};
 use std::time::Duration;
-
-#[derive(Clone)]
-struct ThreadTask<A, B>(Arc<Fn(A) -> B + Send + Sync + 'static>);
-
-impl<A, B> ThreadTask<A, B>
-{
-    fn new<F>(f: F) -> Self
-        where F: Fn(A) -> B + Send + Sync + 'static
-    {
-        ThreadTask(Arc::new(f))
-    }
-}
-
-impl<A, B> AsyncTask for ThreadTask<A, B>
-    where A: Send + 'static, B: Send + 'static
-{
-    type Input = A;
-    type Output = B;
-    type Handler = Updater;
-
-    fn run<F>(&self, handler: &Self::Handler, input: Self::Input, ret: F)
-        where F: Fn(Self::Output) -> bool + 'static
-    {
-        let f = self.0.clone();
-        let (tx, rx) = mpsc::channel();
-        let main_th = handler.main_thread.clone();
-        thread::spawn(move || {
-            tx.send(f(input)).unwrap();
-            main_th.unpark();
-        });
-        handler.register(move || rx.try_recv().map(|v| ret(v)).is_ok())
-    }
-}
 
 #[derive(Clone)]
 struct Updater
@@ -83,19 +50,31 @@ impl Updater
 fn main()
 {
     let updater = Updater::new();
-
-    let sleep_sort = ThreadTask::new(|n| {
-        thread::sleep(Duration::from_millis(n));
-        n
-    });
+    let upd = updater.clone();
 
     let sink = Sink::new();
+
     let result = sink.stream()
-        .map_async(updater.clone(), sleep_sort)
+        // we'll do this part on another thread
+        .map_n(move |arg, sink_| {
+            let n = *arg;
+            let (tx, rx) = mpsc::channel();
+            let main_th = upd.main_thread.clone();
+            // sleep sort
+            thread::spawn(move || {
+                thread::sleep(Duration::from_millis(n));
+                tx.send(n).unwrap();
+                main_th.unpark();
+            });
+            // store the sink and use it later to return the value when it's ready
+            upd.register(move || rx.try_recv().map(|v| sink_.send(v)).is_ok());
+        })
+        // rest of the chain continues on the main thread
         .fold(vec![], |mut vec, n| { vec.push(*n); vec });
 
     sink.feed(vec![5, 6, 10, 42, 1, 94, 22, 33, 7]);
 
+    // the main loop dispatches results back to the stream
     while updater.pending()
     {
         updater.wait();
