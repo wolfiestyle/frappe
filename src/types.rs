@@ -82,10 +82,7 @@ impl<T: Clone> Callbacks<T>
             if !fs[i].call(Cow::Borrowed(&arg)) { n_dead += 1 }
             i += 1;
         }
-        if n > 0
-        {
-            if !fs[i].call(Cow::Owned(arg)) { n_dead += 1 }
-        }
+        if n > 0 && !fs[i].call(Cow::Owned(arg)) { n_dead += 1 }
         drop(fs);
 
         if n_dead > GC_THRESHOLD { self.cleanup(); }

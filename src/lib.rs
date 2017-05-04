@@ -251,7 +251,7 @@ impl<T: SumType2 + Clone + 'static> Stream<T>
             match (result.is_type1(), weak_1.upgrade(), weak_2.upgrade()) {
                 (true, Some(cb), _) => { cb.call(result.into_owned().into_type1().unwrap()); true },
                 (false, _, Some(cb)) => { cb.call(result.into_owned().into_type2().unwrap()); true },
-                (_, None, None) => return false,  // both output steams dropped, drop this callback
+                (_, None, None) => false,  // both output steams dropped, drop this callback
                 _ => true,  // sent to a dropped stream, but the other is still alive. keep this callback
             }
         });
@@ -308,7 +308,7 @@ pub trait Signal<T>: Clone + 'static
         R: Clone, T: Clone + 'static
     {
         let this = self.clone();
-        SignalFn::new(move || this.sample_with(|val| f(val)))
+        SignalFn::new(move || this.sample_with(&f))
     }
 
     /// Samples the value of this signal every time the trigger stream fires.
