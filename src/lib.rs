@@ -288,7 +288,7 @@ impl<T: Clone + 'static> Stream<Stream<T>>
 }
 
 /// Represents a continuous value that changes over time.
-pub trait Signal<T>: Clone + 'static
+pub trait Signal<T>
 {
     /// Sample by value.
     ///
@@ -305,7 +305,7 @@ pub trait Signal<T>: Clone + 'static
     /// Maps a signal with the provided function.
     fn map<F, R>(&self, f: F) -> SignalFn<R>
         where F: Fn(Cow<T>) -> R + 'static,
-        R: Clone, T: Clone + 'static
+        T: Clone, Self: Clone + 'static
     {
         let this = self.clone();
         SignalFn::new(move || this.sample_with(&f))
@@ -314,7 +314,7 @@ pub trait Signal<T>: Clone + 'static
     /// Samples the value of this signal every time the trigger stream fires.
     fn snapshot<S, F, R>(&self, trigger: &Stream<S>, f: F) -> Stream<R>
         where F: Fn(Cow<T>, Cow<S>) -> R + 'static,
-        S: Clone + 'static, R: Clone + 'static, T: Clone + 'static
+        T: Clone, S: Clone + 'static, R: Clone + 'static, Self: Clone + 'static
     {
         let this = self.clone();
         trigger.map(move |b| this.sample_with(|a| f(a, b)))
@@ -322,7 +322,7 @@ pub trait Signal<T>: Clone + 'static
 
     /// Creates a new signal that samples the inner value of a nested signal.
     fn switch<U>(&self) -> SignalNested<U>
-        where T: Signal<U> + Into<SignalAny<U>>, U: Clone
+        where T: Signal<U> + Into<SignalAny<U>>, Self: Clone + 'static
     {
         let this = self.clone();
         SignalNested(Rc::new(move || this.sample().into()))
@@ -333,7 +333,7 @@ pub trait Signal<T>: Clone + 'static
 #[derive(Debug, Clone)]
 pub struct SignalConst<T>(pub T);
 
-impl<T: Clone + 'static> Signal<T> for SignalConst<T>
+impl<T: Clone> Signal<T> for SignalConst<T>
 {
     fn sample(&self) -> T
     {
@@ -385,7 +385,7 @@ impl<T> SignalShared<T>
     }
 }
 
-impl<T: Clone + 'static> Signal<T> for SignalShared<T>
+impl<T: Clone> Signal<T> for SignalShared<T>
 {
     fn sample(&self) -> T
     {
@@ -423,7 +423,7 @@ impl<T> SignalFn<T>
     }
 }
 
-impl<T: Clone + 'static> Signal<T> for SignalFn<T>
+impl<T: Clone> Signal<T> for SignalFn<T>
 {
     fn sample(&self) -> T
     {
@@ -451,7 +451,7 @@ impl<T> fmt::Debug for SignalFn<T>
 #[derive(Clone)]
 pub struct SignalNested<T>(Rc<Fn() -> SignalAny<T>>);
 
-impl<T: Clone + 'static> Signal<T> for SignalNested<T>
+impl<T: Clone> Signal<T> for SignalNested<T>
 {
     fn sample(&self) -> T
     {
@@ -500,7 +500,7 @@ impl<T> SignalAny<T>
     }
 }
 
-impl<T: Clone + 'static> Signal<T> for SignalAny<T>
+impl<T: Clone> Signal<T> for SignalAny<T>
 {
     fn sample(&self) -> T
     {
