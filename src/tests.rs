@@ -21,12 +21,12 @@ fn stream_basic()
 #[test]
 fn signal_basic()
 {
-    let signal = SignalAny::constant(42);
+    let signal = Signal::constant(42);
     assert_eq!(signal.sample(), 42);
     signal.sample_with(|val| assert_eq!(*val, 42));
 
     let val = 33;
-    let signal = SignalAny::from_fn(move || val);
+    let signal = Signal::from_fn(move || val);
     assert_eq!(signal.sample(), val);
 
     let sink = Sink::new();

@@ -287,8 +287,8 @@ impl<T: Clone + 'static> Stream<Stream<T>>
     }
 }
 
-/// Represents a continuous value that changes over time.
-pub trait Signal<T>
+/// Base functionality for all signals.
+pub trait SignalBase<T>
 {
     /// Sample by value.
     ///
@@ -322,7 +322,7 @@ pub trait Signal<T>
 
     /// Creates a new signal that samples the inner value of a nested signal.
     fn switch<U>(&self) -> SignalNested<U>
-        where T: Signal<U> + Into<SignalAny<U>>, Self: Clone + 'static
+        where T: SignalBase<U> + Into<Signal<U>>, Self: Clone + 'static
     {
         let this = self.clone();
         SignalNested(Rc::new(move || this.sample().into()))
@@ -333,7 +333,7 @@ pub trait Signal<T>
 #[derive(Debug, Clone)]
 pub struct SignalConst<T>(pub T);
 
-impl<T: Clone> Signal<T> for SignalConst<T>
+impl<T: Clone> SignalBase<T> for SignalConst<T>
 {
     fn sample(&self) -> T
     {
@@ -385,7 +385,7 @@ impl<T> SignalShared<T>
     }
 }
 
-impl<T: Clone> Signal<T> for SignalShared<T>
+impl<T: Clone> SignalBase<T> for SignalShared<T>
 {
     fn sample(&self) -> T
     {
@@ -423,7 +423,7 @@ impl<T> SignalFn<T>
     }
 }
 
-impl<T: Clone> Signal<T> for SignalFn<T>
+impl<T: Clone> SignalBase<T> for SignalFn<T>
 {
     fn sample(&self) -> T
     {
@@ -449,9 +449,9 @@ impl<T> fmt::Debug for SignalFn<T>
 ///
 /// This is produced by `Signal::switch`
 #[derive(Clone)]
-pub struct SignalNested<T>(Rc<Fn() -> SignalAny<T>>);
+pub struct SignalNested<T>(Rc<Fn() -> Signal<T>>);
 
-impl<T: Clone> Signal<T> for SignalNested<T>
+impl<T: Clone> SignalBase<T> for SignalNested<T>
 {
     fn sample(&self) -> T
     {
@@ -473,12 +473,12 @@ impl<T> fmt::Debug for SignalNested<T>
     }
 }
 
-/// Generalized signal type.
+/// Represents a continuous value that changes over time.
 ///
-/// All other signal subtypes convert to this, so you can say `S: Into<SignalAny<T>>` on your
+/// All other signal subtypes convert to this, so you can say `S: Into<Signal<T>>` on your
 /// functions that accept signals. It's also the recommended way of storing signals on structs.
 #[derive(Debug, Clone)]
-pub enum SignalAny<T>
+pub enum Signal<T>
 {
     Constant(SignalConst<T>),
     Shared(SignalShared<T>),
@@ -486,30 +486,30 @@ pub enum SignalAny<T>
     Nested(SignalNested<T>),
 }
 
-impl<T> SignalAny<T>
+impl<T> Signal<T>
 {
     pub fn constant(val: T) -> Self
     {
-        SignalAny::Constant(SignalConst(val))
+        Signal::Constant(SignalConst(val))
     }
 
     pub fn from_fn<F>(f: F) -> Self
         where F: Fn() -> T + 'static
     {
-        SignalAny::Dynamic(SignalFn::new(f))
+        Signal::Dynamic(SignalFn::new(f))
     }
 }
 
-impl<T: Clone> Signal<T> for SignalAny<T>
+impl<T: Clone> SignalBase<T> for Signal<T>
 {
     fn sample(&self) -> T
     {
         match *self
         {
-            SignalAny::Constant(ref s) => s.sample(),
-            SignalAny::Shared(ref s) => s.sample(),
-            SignalAny::Dynamic(ref s) => s.sample(),
-            SignalAny::Nested(ref s) => s.sample(),
+            Signal::Constant(ref s) => s.sample(),
+            Signal::Shared(ref s) => s.sample(),
+            Signal::Dynamic(ref s) => s.sample(),
+            Signal::Nested(ref s) => s.sample(),
         }
     }
 
@@ -518,51 +518,51 @@ impl<T: Clone> Signal<T> for SignalAny<T>
     {
         match *self
         {
-            SignalAny::Constant(ref s) => s.sample_with(cb),
-            SignalAny::Shared(ref s) => s.sample_with(cb),
-            SignalAny::Dynamic(ref s) => s.sample_with(cb),
-            SignalAny::Nested(ref s) => s.sample_with(cb),
+            Signal::Constant(ref s) => s.sample_with(cb),
+            Signal::Shared(ref s) => s.sample_with(cb),
+            Signal::Dynamic(ref s) => s.sample_with(cb),
+            Signal::Nested(ref s) => s.sample_with(cb),
         }
     }
 }
 
-impl<T> From<T> for SignalAny<T>
+impl<T> From<T> for Signal<T>
 {
     fn from(val: T) -> Self
     {
-        SignalAny::constant(val)
+        Signal::constant(val)
     }
 }
 
-impl<T> From<SignalConst<T>> for SignalAny<T>
+impl<T> From<SignalConst<T>> for Signal<T>
 {
     fn from(sig: SignalConst<T>) -> Self
     {
-        SignalAny::Constant(sig)
+        Signal::Constant(sig)
     }
 }
 
-impl<T> From<SignalShared<T>> for SignalAny<T>
+impl<T> From<SignalShared<T>> for Signal<T>
 {
     fn from(sig: SignalShared<T>) -> Self
     {
-        SignalAny::Shared(sig)
+        Signal::Shared(sig)
     }
 }
 
-impl<T> From<SignalFn<T>> for SignalAny<T>
+impl<T> From<SignalFn<T>> for Signal<T>
 {
     fn from(sig: SignalFn<T>) -> Self
     {
-        SignalAny::Dynamic(sig)
+        Signal::Dynamic(sig)
     }
 }
 
-impl<T> From<SignalNested<T>> for SignalAny<T>
+impl<T> From<SignalNested<T>> for Signal<T>
 {
     fn from(sig: SignalNested<T>) -> Self
     {
-        SignalAny::Nested(sig)
+        Signal::Nested(sig)
     }
 }
 

@@ -1,5 +1,5 @@
 extern crate frappe;
-use frappe::{Sink, Signal};
+use frappe::{Sink, SignalBase};
 
 fn main()
 {
