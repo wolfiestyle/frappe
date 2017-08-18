@@ -58,6 +58,7 @@ fn stream_operations()
     let s_neg = neg.fold(vec![], vec_cons);
     let s_merged = pos.merge(&neg.map(|a| -*a)).fold(vec![], vec_cons);
     let s_accum = stream.fold(vec![], vec_cons).snapshot(&stream, |s, _| s.into_owned()).fold(vec![], vec_cons);
+    let s_cloned = stream.fold_clone(vec![], vec_cons);
 
     sink.feed(vec![5, 8, 13, -2, 42, -33]);
 
@@ -68,6 +69,7 @@ fn stream_operations()
     assert_eq!(s_neg.sample(), [-2, -33]);
     assert_eq!(s_merged.sample(), [5, 8, 13, 2, 42, 33]);
     assert_eq!(s_accum.sample(), [vec![5], vec![5, 8], vec![5, 8, 13], vec![5, 8, 13, -2], vec![5, 8, 13, -2, 42], vec![5, 8, 13, -2, 42, -33]]);
+    assert_eq!(s_cloned.sample(), [5, 8, 13, -2, 42, -33]);
 }
 
 #[cfg(feature="either")]

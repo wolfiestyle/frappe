@@ -178,6 +178,11 @@ impl<T: Clone + 'static> Stream<T>
     }
 
     /// Accumulates the values sent over this stream.
+    ///
+    /// The fold operation is done by locking the accumulator, consuming it's value, and then
+    /// putting back the transformed value. This avoids cloning, but it will cause readers on
+    /// another thread to block if the closure takes too long to execute.
+    /// If you don't want to block, use `Stream::fold_clone` instead.
     pub fn fold<A, F>(&self, initial: A, f: F) -> Signal<A>
         where F: Fn(A, Cow<T>) -> A + 'static,
         A: Clone + 'static
@@ -191,6 +196,29 @@ impl<T: Clone + 'static> Stream<T>
                     let old = ptr::read(acc);
                     let new = f(old, arg);
                     ptr::write(acc, new);
+                })
+                .is_some()
+        });
+
+        Signal::Shared(storage, Some(Rc::new(self.clone())))
+    }
+
+    /// Folds the stream without locking the accumulator.
+    ///
+    /// This will clone the accumulator on every value processed, but it won't block other threads
+    /// reading it if the closure takes too long to execute.
+    pub fn fold_clone<A, F>(&self, initial: A, f: F) -> Signal<A>
+        where F: Fn(A, Cow<T>) -> A + 'static,
+        A: Clone + 'static
+    {
+        let storage = Arc::new(RwLock::new(initial));
+        let weak = Arc::downgrade(&storage);
+        self.cbs.push(move |arg| {
+            weak.upgrade()
+                .map(|st| {
+                    let old = st.read().unwrap().clone();
+                    let new = f(old, arg);
+                    *st.write().unwrap() = new;
                 })
                 .is_some()
         });
