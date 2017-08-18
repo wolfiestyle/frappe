@@ -59,6 +59,14 @@ impl<T: Clone> Sink<T>
     }
 }
 
+impl<T: Clone> Default for Sink<T>
+{
+    fn default() -> Self
+    {
+        Sink::new()
+    }
+}
+
 /// A stream of discrete events sent over time.
 ///
 /// All the streams returned by the methods below contain an internal reference to it's parent,
