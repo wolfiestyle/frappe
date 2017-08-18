@@ -21,7 +21,7 @@ fn stream_basic()
 #[test]
 fn signal_basic()
 {
-    let signal = Signal::constant(42);
+    let signal = Signal::Constant(42);
     assert_eq!(signal.sample(), 42);
     signal.sample_with(|val| assert_eq!(*val, 42));
 
@@ -98,13 +98,13 @@ fn stream_channel()
         let sink2 = Sink::new();
         let s_sum = sink2.stream().fold(0, |a, n| a + *n);
         while let Ok(_) = rx.recv().map(|v| sink2.send(v)) { /* empty */ }
-        s_sum.into_inner()
+        s_sum.into_rwlock().unwrap()
     });
 
     sink.feed(1..100);
     drop(sink);
 
-    let result: SignalShared<_> = thread.join().unwrap().into();
+    let result: Signal<i32> = thread.join().unwrap().into();
     assert_eq!(result.sample(), 4950);
 }
 
@@ -136,9 +136,9 @@ fn stream_switch()
 fn signal_switch()
 {
     let signal_sink = Sink::new();
-    let switched = signal_sink.stream().hold(SignalConst(0)).switch();
+    let switched = signal_sink.stream().hold(Signal::Constant(0)).switch();
 
-    signal_sink.send(SignalConst(1));
+    signal_sink.send(Signal::Constant(1));
     assert_eq!(switched.sample(), 1);
 
     signal_sink.send(2.into());
