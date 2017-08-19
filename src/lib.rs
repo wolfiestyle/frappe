@@ -323,6 +323,12 @@ impl<T: Clone + 'static> Stream<Stream<T>>
 }
 
 /// Represents a continuous value that changes over time.
+///
+/// Signals are usually constructed by stream operations and can be read using the `sample` or
+/// `sample_with` methods.
+///
+/// This type is meant to be used as a black box, but you can fiddle with the enum variants if
+/// you know what you're doing.
 #[derive(Clone)]
 pub enum Signal<T>
 {
@@ -352,9 +358,9 @@ impl<T> Signal<T>
         Signal::Dynamic(Rc::new(f))
     }
 
-    /// Attempts to extract the inner `Arc<RwLock<T>>` from a shared signal.
+    /// Attempts to extract the inner storage from a signal.
     ///
-    /// The returned value can be moved across threads and converted back into a `Signal::Shared`.
+    /// The returned value can be moved across threads and converted back into a signal.
     /// This also drops the reference to it's parent signal, so it can delete the signal
     /// chain as a side effect.
     pub fn into_rwlock(self) -> Result<Arc<RwLock<T>>, Self>
