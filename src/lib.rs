@@ -43,12 +43,14 @@ impl<T: Clone> Sink<T>
     }
 
     /// Sends a value into the sink.
+    #[inline]
     pub fn send(&self, val: T)
     {
         self.cbs.call(val)
     }
 
     /// Sends values from an Iterator into the sink.
+    #[inline]
     pub fn feed<I>(&self, iter: I)
         where I: IntoIterator<Item=T>
     {

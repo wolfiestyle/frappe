@@ -1,11 +1,6 @@
 use std::borrow::Cow;
 use std::cell::{Cell, RefCell};
 use std::fmt;
-use helpers::retain_swap;
-
-// amount of dropped callbacks allowed to stay before initiating a cleanup
-// (arbitrary value, hasn't been performance tuned)
-const GC_THRESHOLD: usize = 5;
 
 // function that becomes uncallable after it returns false.
 // callbacks use a Cow<T> argument so we can choose at runtime if we will send a ref or an owned value
@@ -25,12 +20,8 @@ impl<T: Clone> FnCell<T>
 
     fn call(&self, arg: Cow<T>) -> bool
     {
-        let is_alive = self.alive.get();
-        if is_alive && !(self.f)(arg)
-        {
-            self.alive.set(false);
-            return false
-        }
+        let is_alive = self.alive.get() && (self.f)(arg);
+        self.alive.set(is_alive);
         is_alive
     }
 
@@ -44,7 +35,7 @@ impl<T: Clone> fmt::Debug for FnCell<T>
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result
     {
-        write!(f, "FnCell{{ alive: {} }}", self.alive.get())
+        write!(f, "FnCell {{ f: Fn@{:p}, alive: {} }}", self.f, self.alive.get())
     }
 }
 
@@ -85,7 +76,7 @@ impl<T: Clone> Callbacks<T>
         if n > 0 && !fs[i].call(Cow::Owned(arg)) { n_dead += 1 }
         drop(fs);
 
-        if n_dead > GC_THRESHOLD { self.cleanup(); }
+        if n_dead > 0 { self.cleanup(n_dead); }
     }
 
     fn call_ref(&self, arg: &T)
@@ -94,7 +85,7 @@ impl<T: Clone> Callbacks<T>
             if f.call(Cow::Borrowed(arg)) { a } else { a + 1 }
         });
 
-        if n_dead > GC_THRESHOLD { self.cleanup(); }
+        if n_dead > 0 { self.cleanup(n_dead); }
     }
 
     // we use this to passthrough an unprocessed value
@@ -108,11 +99,24 @@ impl<T: Clone> Callbacks<T>
     }
 
     // removes the dead callbacks
-    fn cleanup(&self)
+    fn cleanup(&self, n_dead: usize)
     {
         if let Ok(mut fs) = self.fs.try_borrow_mut()
         {
-            retain_swap(&mut fs, FnCell::is_alive);
+            let mut i = 0;
+            let mut removed = 0;
+            while removed < n_dead && i < fs.len()
+            {
+                if fs[i].is_alive()
+                {
+                    i += 1;
+                }
+                else
+                {
+                    fs.swap_remove(i);
+                    removed += 1;
+                }
+            }
         }
     }
 }
