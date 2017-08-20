@@ -81,6 +81,7 @@ pub struct Stream<T: Clone>
 impl<T: Clone + 'static> Stream<T>
 {
     /// Maps this stream into another stream using the provided function.
+    #[inline]
     pub fn map<F, R>(&self, f: F) -> Stream<R>
         where F: Fn(Cow<T>) -> R + 'static,
         R: Clone + 'static
@@ -165,6 +166,7 @@ impl<T: Clone + 'static> Stream<T>
     }
 
     /// Creates a Signal that holds the last value sent to this stream.
+    #[inline]
     pub fn hold(&self, initial: T) -> Signal<T>
     {
         self.hold_if(initial, |_| true)
@@ -256,6 +258,7 @@ impl<T: Clone + 'static> Stream<T>
 impl<T: Clone + 'static> Stream<Option<T>>
 {
     /// Filters a stream of `Option`, returning the unwrapped `Some` values
+    #[inline]
     pub fn filter_some(&self) -> Stream<T>
     {
         self.filter_first()
