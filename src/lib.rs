@@ -8,6 +8,9 @@ mod types;
 pub mod stream;
 pub mod signal;
 
+#[macro_use]
+mod macros;
+
 pub use stream::{Sink, Stream};
 pub use signal::Signal;
 pub use types::SumType2;

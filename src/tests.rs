@@ -248,3 +248,17 @@ fn map_n()
 
     assert_eq!(s_out.sample(), [1, 2, 2, 3, 3, 3]);
 }
+
+#[test]
+fn lift()
+{
+    let sink1 = Sink::new();
+    let sink2 = Sink::new();
+    let res = signal_lift!(|a, b| a + b, sink1.stream().hold(0), sink2.stream().hold(0));
+
+    assert_eq!(res.sample(), 0);
+    sink1.send(40);
+    assert_eq!(res.sample(), 40);
+    sink2.send(2);
+    assert_eq!(res.sample(), 42);
+}
