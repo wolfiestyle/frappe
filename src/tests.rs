@@ -1,5 +1,9 @@
 use super::*;
+use std::rc::Rc;
+use std::borrow::Cow;
 use std::fmt::Debug;
+
+fn vec_cons<T: Clone>(mut v: Vec<T>, x: Cow<T>) -> Vec<T> { v.push(x.into_owned()); v }
 
 #[test]
 fn stream_basic()
@@ -41,8 +45,6 @@ fn signal_basic()
     assert_eq!(s_double.sample(), 8);
     assert_eq!(s_odd.sample(), 3);
 }
-
-fn vec_cons<T: Clone>(mut v: Vec<T>, x: Cow<T>) -> Vec<T> { v.push(x.into_owned()); v }
 
 #[test]
 fn stream_operations()
@@ -147,23 +149,23 @@ fn signal_switch()
     assert_eq!(switched.sample(), 2);
 }
 
-#[derive(Debug)]
-struct Storage<T>(Vec<T>);
-
-impl<T> Storage<T>
-{
-    fn new() -> Self { Storage(Vec::new()) }
-    fn push(mut self, a: T) -> Self { self.0.push(a); self }
-}
-
-impl<T: Debug> Clone for Storage<T>
-{
-    fn clone(&self) -> Self { panic!("storage cloned! {:?}", self.0) }
-}
-
 #[test]
 fn cloning()
 {
+    #[derive(Debug)]
+    struct Storage<T>(Vec<T>);
+
+    impl<T> Storage<T>
+    {
+        fn new() -> Self { Storage(Vec::new()) }
+        fn push(mut self, a: T) -> Self { self.0.push(a); self }
+    }
+
+    impl<T: Debug> Clone for Storage<T>
+    {
+        fn clone(&self) -> Self { panic!("storage cloned! {:?}", self.0) }
+    }
+
     let sink = Sink::new();
     let accum = sink.stream().fold(Storage::new(), |a, v| a.push(*v));
 
