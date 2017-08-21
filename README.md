@@ -3,6 +3,8 @@
 Functional Reactive Programming library inspired by [Carboxyl](https://github.com/aepsil0n/carboxyl).
 It's designed to efficiently pass objects around by avoiding cloning as much as possible.
 
+[Documentation](https://docs.rs/frappe)
+
 ## Usage
 
 ```Rust
