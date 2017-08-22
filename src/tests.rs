@@ -101,7 +101,7 @@ fn stream_channel()
     let thread = std::thread::spawn(move || {
         let sink2 = Sink::new();
         let s_sum = sink2.stream().fold(0, |a, n| a + *n);
-        sink2.feed(rx.iter());
+        sink2.feed(rx);
         s_sum.into_rwlock().unwrap()
     });
 
