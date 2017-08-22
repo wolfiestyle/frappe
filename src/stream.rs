@@ -278,11 +278,30 @@ impl<T: SumType2 + Clone + 'static> Stream<T>
         let (cbs_1, weak_1) = rc_and_weak(Callbacks::new());
         let (cbs_2, weak_2) = rc_and_weak(Callbacks::new());
         self.cbs.push(move |result| {
-            match (result.is_type1(), weak_1.upgrade(), weak_2.upgrade()) {
-                (true, Some(cb), _) => { cb.call(result.into_owned().into_type1().unwrap()); true },
-                (false, _, Some(cb)) => { cb.call(result.into_owned().into_type2().unwrap()); true },
-                (_, None, None) => false,  // both output steams dropped, drop this callback
-                _ => true,  // sent to a dropped stream, but the other is still alive. keep this callback
+            if result.is_type1()
+            {
+                if let Some(cb) = weak_1.upgrade()
+                {
+                    cb.call(result.into_owned().into_type1().unwrap());
+                    true
+                }
+                else
+                {
+                    // drop callback if both output streams dropped
+                    weak_2.upgrade().is_some()
+                }
+            }
+            else // if result.is_type2()
+            {
+                if let Some(cb) = weak_2.upgrade()
+                {
+                    cb.call(result.into_owned().into_type2().unwrap());
+                    true
+                }
+                else
+                {
+                    weak_1.upgrade().is_some()
+                }
             }
         });
         let source_rc = Rc::new(self.clone());
