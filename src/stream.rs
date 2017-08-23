@@ -23,7 +23,7 @@ impl<T: Clone> Sink<T>
     /// Creates a new sink.
     pub fn new() -> Self
     {
-        Sink{ cbs: Rc::new(Callbacks::new()) }
+        Sink{ cbs: Default::default() }
     }
 
     /// Creates a stream that receives the events sent to this sink.
@@ -72,6 +72,12 @@ pub struct Stream<T: Clone>
 
 impl<T: Clone + 'static> Stream<T>
 {
+    /// Creates a stream that never fires.
+    pub fn never() -> Self
+    {
+        Stream{ cbs: Default::default(), source: None }
+    }
+
     /// Maps this stream into another stream using the provided function.
     #[inline]
     pub fn map<F, R>(&self, f: F) -> Stream<R>

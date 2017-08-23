@@ -50,7 +50,7 @@ impl<T: Clone> Callbacks<T>
 {
     pub fn new() -> Self
     {
-        Callbacks{ fs: RefCell::new(Vec::new()) }
+        Callbacks{ fs: Default::default() }
     }
 
     pub fn push<F>(&self, cb: F)
@@ -118,6 +118,14 @@ impl<T: Clone> Callbacks<T>
                 }
             }
         }
+    }
+}
+
+impl<T: Clone> Default for Callbacks<T>
+{
+    fn default() -> Self
+    {
+        Callbacks::new()
     }
 }
 
