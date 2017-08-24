@@ -5,8 +5,8 @@ pub extern crate either;
 
 mod helpers;
 mod types;
-pub mod stream;
-pub mod signal;
+mod stream;
+mod signal;
 
 #[macro_use]
 mod macros;
