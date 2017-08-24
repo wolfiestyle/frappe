@@ -1,24 +1,24 @@
-use std::borrow::Cow;
 use std::cell::{Cell, RefCell};
 use std::fmt;
+use maybe_owned::MaybeOwned;
 
 // function that becomes uncallable after it returns false.
-// callbacks use a Cow<T> argument so we can choose at runtime if we will send a ref or an owned value
+// callbacks use a MaybeOwned<T> argument so we can choose at runtime if we will send a ref or an owned value
 struct FnCell<T: Clone>
 {
-    f: Box<Fn(Cow<T>) -> bool>,
+    f: Box<Fn(MaybeOwned<T>) -> bool>,
     alive: Cell<bool>,
 }
 
 impl<T: Clone> FnCell<T>
 {
     fn new<F>(f: F) -> Self
-        where F: Fn(Cow<T>) -> bool + 'static
+        where F: Fn(MaybeOwned<T>) -> bool + 'static
     {
         FnCell{ f: Box::new(f), alive: Cell::new(true) }
     }
 
-    fn call(&self, arg: Cow<T>) -> bool
+    fn call(&self, arg: MaybeOwned<T>) -> bool
     {
         let is_alive = self.alive.get() && (self.f)(arg);
         self.alive.set(is_alive);
@@ -54,7 +54,7 @@ impl<T: Clone> Callbacks<T>
     }
 
     pub fn push<F>(&self, cb: F)
-        where F: Fn(Cow<T>) -> bool + 'static
+        where F: Fn(MaybeOwned<T>) -> bool + 'static
     {
         self.fs.borrow_mut().push(FnCell::new(cb))
     }
@@ -70,10 +70,10 @@ impl<T: Clone> Callbacks<T>
         let mut n_dead = 0;
         for _ in 1..n
         {
-            if !fs[i].call(Cow::Borrowed(&arg)) { n_dead += 1 }
+            if !fs[i].call(MaybeOwned::Borrowed(&arg)) { n_dead += 1 }
             i += 1;
         }
-        if n > 0 && !fs[i].call(Cow::Owned(arg)) { n_dead += 1 }
+        if n > 0 && !fs[i].call(MaybeOwned::Owned(arg)) { n_dead += 1 }
         drop(fs);
 
         if n_dead > 0 { self.cleanup(n_dead); }
@@ -82,19 +82,19 @@ impl<T: Clone> Callbacks<T>
     fn call_ref(&self, arg: &T)
     {
         let n_dead = self.fs.borrow().iter().fold(0, |a, f| {
-            if f.call(Cow::Borrowed(arg)) { a } else { a + 1 }
+            if f.call(MaybeOwned::Borrowed(arg)) { a } else { a + 1 }
         });
 
         if n_dead > 0 { self.cleanup(n_dead); }
     }
 
     // we use this to passthrough an unprocessed value
-    pub fn call_cow(&self, arg: Cow<T>)
+    pub fn call_cow(&self, arg: MaybeOwned<T>)
     {
         match arg
         {
-            Cow::Borrowed(r) => self.call_ref(r),
-            Cow::Owned(v) => self.call(v),
+            MaybeOwned::Borrowed(r) => self.call_ref(r),
+            MaybeOwned::Owned(v) => self.call(v),
         }
     }
 

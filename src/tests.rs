@@ -1,9 +1,8 @@
 use super::*;
 use std::rc::Rc;
-use std::borrow::Cow;
 use std::fmt::Debug;
 
-fn vec_cons<T: Clone>(mut v: Vec<T>, x: Cow<T>) -> Vec<T> { v.push(x.into_owned()); v }
+fn vec_cons<T: Clone>(mut v: Vec<T>, x: MaybeOwned<T>) -> Vec<T> { v.push(x.into_owned()); v }
 
 #[test]
 fn stream_basic()

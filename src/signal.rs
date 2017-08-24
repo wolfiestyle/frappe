@@ -1,9 +1,9 @@
 use std::rc::Rc;
 use std::sync::{Arc, RwLock};
-use std::borrow::Cow;
 use std::any::Any;
 use std::fmt;
 use stream::Stream;
+use maybe_owned::MaybeOwned;
 
 /// Represents a continuous value that changes over time.
 ///
@@ -70,13 +70,13 @@ impl<T: Clone> Signal<T>
     /// This is meant to be the most efficient way when cloning is undesirable,
     /// but it requires a callback to prevent outliving internal `RwLock` borrows.
     pub fn sample_with<F, R>(&self, cb: F) -> R
-        where F: FnOnce(Cow<T>) -> R
+        where F: FnOnce(MaybeOwned<T>) -> R
     {
         match *self
         {
-            Signal::Constant(ref val) => cb(Cow::Borrowed(val)),
-            Signal::Shared(ref val, _) => cb(Cow::Borrowed(&val.read().unwrap())),
-            Signal::Dynamic(ref f) => cb(Cow::Owned(f())),
+            Signal::Constant(ref val) => cb(MaybeOwned::Borrowed(val)),
+            Signal::Shared(ref val, _) => cb(MaybeOwned::Borrowed(&val.read().unwrap())),
+            Signal::Dynamic(ref f) => cb(MaybeOwned::Owned(f())),
             Signal::Nested(ref f) => f().sample_with(cb),
         }
     }
@@ -86,7 +86,7 @@ impl<T: Clone + 'static> Signal<T>
 {
     /// Maps a signal with the provided function.
     pub fn map<F, R>(&self, f: F) -> Signal<R>
-        where F: Fn(Cow<T>) -> R + 'static,
+        where F: Fn(MaybeOwned<T>) -> R + 'static,
         R: Clone + 'static
     {
         let this = self.clone();
@@ -95,7 +95,7 @@ impl<T: Clone + 'static> Signal<T>
 
     /// Samples the value of this signal every time the trigger stream fires.
     pub fn snapshot<S, F, R>(&self, trigger: &Stream<S>, f: F) -> Stream<R>
-        where F: Fn(Cow<T>, Cow<S>) -> R + 'static,
+        where F: Fn(MaybeOwned<T>, MaybeOwned<S>) -> R + 'static,
         S: Clone + 'static, R: Clone + 'static
     {
         let this = self.clone();

@@ -1,12 +1,12 @@
 use std::rc::Rc;
 use std::cell::Cell;
-use std::borrow::Cow;
 use std::ptr;
 use std::sync::{mpsc, Arc, RwLock};
 use std::any::Any;
 use helpers::{rc_and_weak, with_weak};
 use types::{Callbacks, SumType2};
 use signal::Signal;
+use maybe_owned::MaybeOwned;
 
 #[cfg(feature="either")]
 use either::Either;
@@ -81,7 +81,7 @@ impl<T: Clone + 'static> Stream<T>
     /// Maps this stream into another stream using the provided function.
     #[inline]
     pub fn map<F, R>(&self, f: F) -> Stream<R>
-        where F: Fn(Cow<T>) -> R + 'static,
+        where F: Fn(MaybeOwned<T>) -> R + 'static,
         R: Clone + 'static
     {
         self.filter_map(move |arg| Some(f(arg)))
@@ -100,7 +100,7 @@ impl<T: Clone + 'static> Stream<T>
 
     /// Filter and map a stream simultaneously.
     pub fn filter_map<F, R>(&self, f: F) -> Stream<R>
-        where F: Fn(Cow<T>) -> Option<R> + 'static,
+        where F: Fn(MaybeOwned<T>) -> Option<R> + 'static,
         R: Clone + 'static
     {
         let (new_cbs, weak) = rc_and_weak(Callbacks::new());
@@ -127,7 +127,7 @@ impl<T: Clone + 'static> Stream<T>
     /// Merges two streams of different types using the provided function.
     #[cfg(feature="either")]
     pub fn merge_with<U, F, R>(&self, other: &Stream<U>, f: F) -> Stream<R>
-        where F: Fn(Either<Cow<T>, Cow<U>>) -> R + 'static,
+        where F: Fn(Either<MaybeOwned<T>, MaybeOwned<U>>) -> R + 'static,
         U: Clone + 'static, R: Clone + 'static
     {
         let (new_cbs, weak1) = rc_and_weak(Callbacks::new());
@@ -147,7 +147,7 @@ impl<T: Clone + 'static> Stream<T>
     ///
     /// This is meant to be used as a debugging tool and not to cause side effects.
     pub fn inspect<F>(self, f: F) -> Self
-        where F: Fn(Cow<T>) + 'static
+        where F: Fn(MaybeOwned<T>) + 'static
     {
         self.cbs.push(move |arg| { f(arg); true });
         self
@@ -192,7 +192,7 @@ impl<T: Clone + 'static> Stream<T>
     /// another thread to block if the closure takes too long to execute.
     /// If you don't want to block, use `Stream::fold_clone` instead.
     pub fn fold<A, F>(&self, initial: A, f: F) -> Signal<A>
-        where F: Fn(A, Cow<T>) -> A + 'static,
+        where F: Fn(A, MaybeOwned<T>) -> A + 'static,
         A: Clone + 'static
     {
         let storage = Arc::new(RwLock::new(initial));
@@ -216,7 +216,7 @@ impl<T: Clone + 'static> Stream<T>
     /// This will clone the accumulator on every value processed, but it won't block other threads
     /// reading it if the closure takes too long to execute.
     pub fn fold_clone<A, F>(&self, initial: A, f: F) -> Signal<A>
-        where F: Fn(A, Cow<T>) -> A + 'static,
+        where F: Fn(A, MaybeOwned<T>) -> A + 'static,
         A: Clone + 'static
     {
         let storage = Arc::new(RwLock::new(initial));
@@ -242,7 +242,7 @@ impl<T: Clone + 'static> Stream<T>
     /// This primitive is useful to construct asynchronous operations, since you can
     /// store the sink for later usage.
     pub fn map_n<F, R>(&self, f: F) -> Stream<R>
-        where F: Fn(Cow<T>, Sink<R>) + 'static,
+        where F: Fn(MaybeOwned<T>, Sink<R>) + 'static,
         R: Clone + 'static
     {
         let (new_cbs, weak) = rc_and_weak(Callbacks::new());
