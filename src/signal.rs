@@ -32,7 +32,7 @@ pub enum Signal<T>
     Nested(Rc<Fn() -> Signal<T>>),
 }
 
-impl<T> Signal<T>
+impl<T: Clone> Signal<T>
 {
     /// Creates a signal that samples it's values from the supplied function.
     pub fn from_fn<F>(f: F) -> Self
@@ -50,10 +50,7 @@ impl<T> Signal<T>
     {
         if let Signal::Shared(val, _) = self { Ok(val) } else { Err(self) }
     }
-}
 
-impl<T: Clone> Signal<T>
-{
     /// Sample by value.
     ///
     /// This will clone the content of the signal.
@@ -90,6 +87,7 @@ impl<T: Clone + 'static> Signal<T>
     /// Maps a signal with the provided function.
     pub fn map<F, R>(&self, f: F) -> Signal<R>
         where F: Fn(Cow<T>) -> R + 'static,
+        R: Clone + 'static
     {
         let this = self.clone();
         Signal::from_fn(move || this.sample_with(&f))
@@ -115,7 +113,7 @@ impl<T: Clone + 'static> Signal<Signal<T>>
     }
 }
 
-impl<T> From<T> for Signal<T>
+impl<T: Clone> From<T> for Signal<T>
 {
     fn from(val: T) -> Self
     {
@@ -123,7 +121,7 @@ impl<T> From<T> for Signal<T>
     }
 }
 
-impl<T> From<Arc<RwLock<T>>> for Signal<T>
+impl<T: Clone> From<Arc<RwLock<T>>> for Signal<T>
 {
     fn from(val: Arc<RwLock<T>>) -> Self
     {
