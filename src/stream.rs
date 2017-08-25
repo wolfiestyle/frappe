@@ -101,7 +101,7 @@ impl<T: 'static> Stream<T>
     {
         let (new_cbs, weak) = rc_and_weak(Callbacks::new());
         self.cbs.push(move |arg| {
-            with_weak(&weak, |cb| if pred(&arg) { cb.call_cow(arg) })
+            with_weak(&weak, |cb| if pred(&arg) { cb.call_dyn(arg) })
         });
         Stream{ cbs: new_cbs, source: Some(Rc::new(self.clone())) }
     }
@@ -124,10 +124,10 @@ impl<T: 'static> Stream<T>
         let (new_cbs, weak1) = rc_and_weak(Callbacks::new());
         let weak2 = weak1.clone();
         self.cbs.push(move |arg| {
-            with_weak(&weak1, |cb| cb.call_cow(arg))
+            with_weak(&weak1, |cb| cb.call_dyn(arg))
         });
         other.cbs.push(move |arg| {
-            with_weak(&weak2, |cb| cb.call_cow(arg))
+            with_weak(&weak2, |cb| cb.call_dyn(arg))
         });
         Stream{ cbs: new_cbs, source: Some(Rc::new((self.clone(), other.clone()))) }
     }
@@ -345,7 +345,7 @@ impl<T: 'static> Stream<Stream<T>>
             // redirect the inner stream to the output stream
             stream.cbs.push(move |arg| {
                 if my_id != cur_id.get() { return false }
-                with_weak(&cbs_w, |cb| cb.call_cow(arg))
+                with_weak(&cbs_w, |cb| cb.call_dyn(arg))
             });
             true
         });

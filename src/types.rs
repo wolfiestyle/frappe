@@ -89,7 +89,7 @@ impl<T> Callbacks<T>
     }
 
     // we use this to passthrough an unprocessed value
-    pub fn call_cow(&self, arg: MaybeOwned<T>)
+    pub fn call_dyn(&self, arg: MaybeOwned<T>)
     {
         match arg
         {
