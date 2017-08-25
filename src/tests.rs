@@ -1,6 +1,7 @@
 use super::*;
 use std::rc::Rc;
 use std::fmt::Debug;
+use types::MaybeOwned;
 
 fn vec_cons<T: Clone>(mut v: Vec<T>, x: MaybeOwned<T>) -> Vec<T> { v.push(x.into_owned()); v }
 

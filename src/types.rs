@@ -1,6 +1,11 @@
+//! Miscellaneous types used by the library.
+
 use std::cell::{Cell, RefCell};
 use std::fmt;
-use maybe_owned::MaybeOwned;
+
+pub use maybe_owned::MaybeOwned;
+#[cfg(feature="either")]
+pub use either::Either;
 
 // function that becomes uncallable after it returns false.
 // callbacks use a MaybeOwned<T> argument so we can choose at runtime if we will send a ref or an owned value
@@ -41,7 +46,7 @@ impl<T> fmt::Debug for FnCell<T>
 
 // a collection of callbacks
 #[derive(Debug)]
-pub struct Callbacks<T>
+pub(crate) struct Callbacks<T>
 {
     fs: RefCell<Vec<FnCell<T>>>,
 }
