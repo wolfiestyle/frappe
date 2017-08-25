@@ -12,11 +12,10 @@ use maybe_owned::MaybeOwned;
 ///
 /// This type is meant to be used as a black box, but you can fiddle with the enum variants if
 /// you know what you're doing.
-#[derive(Clone)]
 pub enum Signal<T>
 {
     /// A signal with constant value.
-    Constant(T),
+    Constant(Rc<T>),
     /// A signal that reads from shared data.
     ///
     /// This is produced by stream methods that create a signal.
@@ -32,8 +31,13 @@ pub enum Signal<T>
     Nested(Rc<Fn() -> Signal<T>>),
 }
 
-impl<T: Clone> Signal<T>
+impl<T> Signal<T>
 {
+    pub fn constant<V: Into<Rc<T>>>(val: V) -> Self
+    {
+        Signal::Constant(val.into())
+    }
+
     /// Creates a signal that samples it's values from the supplied function.
     pub fn from_fn<F>(f: F) -> Self
         where F: Fn() -> T + 'static
@@ -49,20 +53,6 @@ impl<T: Clone> Signal<T>
     pub fn into_rwlock(self) -> Result<Arc<RwLock<T>>, Self>
     {
         if let Signal::Shared(val, _) = self { Ok(val) } else { Err(self) }
-    }
-
-    /// Sample by value.
-    ///
-    /// This will clone the content of the signal.
-    pub fn sample(&self) -> T
-    {
-        match *self
-        {
-            Signal::Constant(ref val) => val.clone(),
-            Signal::Shared(ref val, _) => val.read().unwrap().clone(),
-            Signal::Dynamic(ref f) => f(),
-            Signal::Nested(ref f) => f().sample(),
-        }
     }
 
     /// Sample by reference.
@@ -82,12 +72,29 @@ impl<T: Clone> Signal<T>
     }
 }
 
-impl<T: Clone + 'static> Signal<T>
+impl<T: Clone> Signal<T>
+{
+    /// Sample by value.
+    ///
+    /// This will clone the content of the signal.
+    pub fn sample(&self) -> T
+    {
+        match *self
+        {
+            Signal::Constant(ref val) => (**val).clone(),
+            Signal::Shared(ref val, _) => val.read().unwrap().clone(),
+            Signal::Dynamic(ref f) => f(),
+            Signal::Nested(ref f) => f().sample(),
+        }
+    }
+}
+
+impl<T: 'static> Signal<T>
 {
     /// Maps a signal with the provided function.
     pub fn map<F, R>(&self, f: F) -> Signal<R>
         where F: Fn(MaybeOwned<T>) -> R + 'static,
-        R: Clone + 'static
+        R: 'static
     {
         let this = self.clone();
         Signal::from_fn(move || this.sample_with(&f))
@@ -96,14 +103,14 @@ impl<T: Clone + 'static> Signal<T>
     /// Samples the value of this signal every time the trigger stream fires.
     pub fn snapshot<S, F, R>(&self, trigger: &Stream<S>, f: F) -> Stream<R>
         where F: Fn(MaybeOwned<T>, MaybeOwned<S>) -> R + 'static,
-        S: Clone + 'static, R: Clone + 'static
+        S: 'static, R: 'static
     {
         let this = self.clone();
         trigger.map(move |b| this.sample_with(|a| f(a, b)))
     }
 }
 
-impl<T: Clone + 'static> Signal<Signal<T>>
+impl<T: 'static> Signal<Signal<T>>
 {
     /// Creates a new signal that samples the inner value of a nested signal.
     pub fn switch(&self) -> Signal<T>
@@ -113,19 +120,42 @@ impl<T: Clone + 'static> Signal<Signal<T>>
     }
 }
 
-impl<T: Clone> From<T> for Signal<T>
+impl<T> From<T> for Signal<T>
 {
     fn from(val: T) -> Self
+    {
+        Signal::constant(val)
+    }
+}
+
+impl<T> From<Rc<T>> for Signal<T>
+{
+    fn from(val: Rc<T>) -> Self
     {
         Signal::Constant(val)
     }
 }
 
-impl<T: Clone> From<Arc<RwLock<T>>> for Signal<T>
+impl<T> From<Arc<RwLock<T>>> for Signal<T>
 {
     fn from(val: Arc<RwLock<T>>) -> Self
     {
         Signal::Shared(val, None)
+    }
+}
+
+// the derive impl adds a `T: Clone` we don't want
+impl<T> Clone for Signal<T>
+{
+    fn clone(&self) -> Self
+    {
+        match *self
+        {
+            Signal::Constant(ref val) => Signal::Constant(val.clone()),
+            Signal::Shared(ref val, ref r) => Signal::Shared(val.clone(), r.clone()),
+            Signal::Dynamic(ref rf) => Signal::Dynamic(rf.clone()),
+            Signal::Nested(ref rf) => Signal::Nested(rf.clone()),
+        }
     }
 }
 

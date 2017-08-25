@@ -24,7 +24,7 @@ fn stream_basic()
 #[test]
 fn signal_basic()
 {
-    let signal = Signal::Constant(42);
+    let signal = Signal::constant(42);
     assert_eq!(signal.sample(), 42);
     signal.sample_with(|val| assert_eq!(*val, 42));
 
@@ -139,9 +139,9 @@ fn stream_switch()
 fn signal_switch()
 {
     let signal_sink = Sink::new();
-    let switched = signal_sink.stream().hold(Signal::Constant(0)).switch();
+    let switched = signal_sink.stream().hold(Signal::constant(0)).switch();
 
-    signal_sink.send(Signal::Constant(1));
+    signal_sink.send(Signal::constant(1));
     assert_eq!(switched.sample(), 1);
 
     signal_sink.send(2.into());

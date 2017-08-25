@@ -4,13 +4,13 @@ use maybe_owned::MaybeOwned;
 
 // function that becomes uncallable after it returns false.
 // callbacks use a MaybeOwned<T> argument so we can choose at runtime if we will send a ref or an owned value
-struct FnCell<T: Clone>
+struct FnCell<T>
 {
     f: Box<Fn(MaybeOwned<T>) -> bool>,
     alive: Cell<bool>,
 }
 
-impl<T: Clone> FnCell<T>
+impl<T> FnCell<T>
 {
     fn new<F>(f: F) -> Self
         where F: Fn(MaybeOwned<T>) -> bool + 'static
@@ -31,7 +31,7 @@ impl<T: Clone> FnCell<T>
     }
 }
 
-impl<T: Clone> fmt::Debug for FnCell<T>
+impl<T> fmt::Debug for FnCell<T>
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result
     {
@@ -41,12 +41,12 @@ impl<T: Clone> fmt::Debug for FnCell<T>
 
 // a collection of callbacks
 #[derive(Debug)]
-pub struct Callbacks<T: Clone>
+pub struct Callbacks<T>
 {
     fs: RefCell<Vec<FnCell<T>>>,
 }
 
-impl<T: Clone> Callbacks<T>
+impl<T> Callbacks<T>
 {
     pub fn new() -> Self
     {
@@ -121,7 +121,7 @@ impl<T: Clone> Callbacks<T>
     }
 }
 
-impl<T: Clone> Default for Callbacks<T>
+impl<T> Default for Callbacks<T>
 {
     fn default() -> Self
     {

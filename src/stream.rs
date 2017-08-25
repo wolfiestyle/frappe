@@ -12,13 +12,13 @@ use maybe_owned::MaybeOwned;
 use either::Either;
 
 /// A source of events that feeds the streams connected to it.
-#[derive(Debug, Clone)]
-pub struct Sink<T: Clone>
+#[derive(Debug)]
+pub struct Sink<T>
 {
     cbs: Rc<Callbacks<T>>,
 }
 
-impl<T: Clone> Sink<T>
+impl<T> Sink<T>
 {
     /// Creates a new sink.
     pub fn new() -> Self
@@ -51,7 +51,7 @@ impl<T: Clone> Sink<T>
     }
 }
 
-impl<T: Clone> Default for Sink<T>
+impl<T> Default for Sink<T>
 {
     fn default() -> Self
     {
@@ -59,18 +59,26 @@ impl<T: Clone> Default for Sink<T>
     }
 }
 
+impl<T> Clone for Sink<T>
+{
+    fn clone(&self) -> Self
+    {
+        Sink{ cbs: self.cbs.clone() }
+    }
+}
+
 /// A stream of discrete events sent over time.
 ///
 /// All the streams returned by the methods below contain an internal reference to it's parent,
 /// so dropping intermediate streams won't break the chain.
-#[derive(Debug, Clone)]
-pub struct Stream<T: Clone>
+#[derive(Debug)]
+pub struct Stream<T>
 {
     cbs: Rc<Callbacks<T>>,
     source: Option<Rc<Any>>,  // strong reference to a parent Stream
 }
 
-impl<T: Clone + 'static> Stream<T>
+impl<T: 'static> Stream<T>
 {
     /// Creates a stream that never fires.
     pub fn never() -> Self
@@ -82,7 +90,7 @@ impl<T: Clone + 'static> Stream<T>
     #[inline]
     pub fn map<F, R>(&self, f: F) -> Stream<R>
         where F: Fn(MaybeOwned<T>) -> R + 'static,
-        R: Clone + 'static
+        R: 'static
     {
         self.filter_map(move |arg| Some(f(arg)))
     }
@@ -101,7 +109,7 @@ impl<T: Clone + 'static> Stream<T>
     /// Filter and map a stream simultaneously.
     pub fn filter_map<F, R>(&self, f: F) -> Stream<R>
         where F: Fn(MaybeOwned<T>) -> Option<R> + 'static,
-        R: Clone + 'static
+        R: 'static
     {
         let (new_cbs, weak) = rc_and_weak(Callbacks::new());
         self.cbs.push(move |arg| {
@@ -128,7 +136,7 @@ impl<T: Clone + 'static> Stream<T>
     #[cfg(feature="either")]
     pub fn merge_with<U, F, R>(&self, other: &Stream<U>, f: F) -> Stream<R>
         where F: Fn(Either<MaybeOwned<T>, MaybeOwned<U>>) -> R + 'static,
-        U: Clone + 'static, R: Clone + 'static
+        U: 'static, R: 'static
     {
         let (new_cbs, weak1) = rc_and_weak(Callbacks::new());
         let weak2 = weak1.clone();
@@ -143,48 +151,6 @@ impl<T: Clone + 'static> Stream<T>
         Stream{ cbs: new_cbs, source: Some(Rc::new((self.clone(), other.clone()))) }
     }
 
-    /// Reads the values without modifying them.
-    ///
-    /// This is meant to be used as a debugging tool and not to cause side effects.
-    pub fn inspect<F>(self, f: F) -> Self
-        where F: Fn(MaybeOwned<T>) + 'static
-    {
-        self.cbs.push(move |arg| { f(arg); true });
-        self
-    }
-
-    /// Creates a channel and sends the stream events through it.
-    pub fn channel(&self) -> mpsc::Receiver<T>
-    {
-        let (tx, rx) = mpsc::channel();
-        self.cbs.push(move |arg| {
-            tx.send(arg.into_owned()).is_ok()
-        });
-        rx
-    }
-
-    /// Creates a Signal that holds the last value sent to this stream.
-    #[inline]
-    pub fn hold(&self, initial: T) -> Signal<T>
-    {
-        self.hold_if(initial, |_| true)
-    }
-
-    /// Holds the last value in this stream where the predicate is `true`.
-    pub fn hold_if<F>(&self, initial: T, pred: F) -> Signal<T>
-        where F: Fn(&T) -> bool + 'static
-    {
-        let storage = Arc::new(RwLock::new(initial));
-        let weak = Arc::downgrade(&storage);
-        self.cbs.push(move |arg| {
-            weak.upgrade()
-                .map(|st| if pred(&arg) { *st.write().unwrap() = arg.into_owned() })
-                .is_some()
-        });
-
-        Signal::Shared(storage, Some(Rc::new(self.clone())))
-    }
-
     /// Accumulates the values sent over this stream.
     ///
     /// The fold operation is done by locking the accumulator, consuming it's value, and then
@@ -193,7 +159,7 @@ impl<T: Clone + 'static> Stream<T>
     /// If you don't want to block, use `Stream::fold_clone` instead.
     pub fn fold<A, F>(&self, initial: A, f: F) -> Signal<A>
         where F: Fn(A, MaybeOwned<T>) -> A + 'static,
-        A: Clone + 'static
+        A: 'static
     {
         let storage = Arc::new(RwLock::new(initial));
         let weak = Arc::downgrade(&storage);
@@ -243,13 +209,58 @@ impl<T: Clone + 'static> Stream<T>
     /// store the sink for later usage.
     pub fn map_n<F, R>(&self, f: F) -> Stream<R>
         where F: Fn(MaybeOwned<T>, Sink<R>) + 'static,
-        R: Clone + 'static
+        R: 'static
     {
         let (new_cbs, weak) = rc_and_weak(Callbacks::new());
         self.cbs.push(move |arg| {
             with_weak(&weak, |cb| f(arg, Sink{ cbs: cb }))
         });
         Stream{ cbs: new_cbs, source: Some(Rc::new(self.clone())) }
+    }
+
+    /// Reads the values without modifying them.
+    ///
+    /// This is meant to be used as a debugging tool and not to cause side effects.
+    pub fn inspect<F>(self, f: F) -> Self
+        where F: Fn(MaybeOwned<T>) + 'static
+    {
+        self.cbs.push(move |arg| { f(arg); true });
+        self
+    }
+}
+
+impl<T: Clone + 'static> Stream<T>
+{
+    /// Creates a Signal that holds the last value sent to this stream.
+    #[inline]
+    pub fn hold(&self, initial: T) -> Signal<T>
+    {
+        self.hold_if(initial, |_| true)
+    }
+
+    /// Holds the last value in this stream where the predicate is `true`.
+    pub fn hold_if<F>(&self, initial: T, pred: F) -> Signal<T>
+        where F: Fn(&T) -> bool + 'static
+    {
+        let storage = Arc::new(RwLock::new(initial));
+        let weak = Arc::downgrade(&storage);
+        self.cbs.push(move |arg| {
+            weak.upgrade()
+                .map(|st| if pred(&arg) { *st.write().unwrap() = arg.into_owned() })
+                .is_some()
+        });
+
+        Signal::Shared(storage, Some(Rc::new(self.clone())))
+    }
+
+    /// Creates a channel and sends the stream events through it.
+    pub fn channel(&self) -> mpsc::Receiver<T>
+    {
+        let (tx, rx) = mpsc::channel();
+        self.cbs.push(move |arg| {
+            tx.send(arg.into_owned()).is_ok()
+        });
+        rx
     }
 }
 
@@ -264,7 +275,7 @@ impl<T: Clone + 'static> Stream<Option<T>>
 }
 
 impl<T: SumType2 + Clone + 'static> Stream<T>
-    where T::Type1: Clone + 'static, T::Type2: Clone + 'static
+    where T::Type1: 'static, T::Type2: 'static
 {
     /// Creates a stream with only the first element of a sum type
     pub fn filter_first(&self) -> Stream<T::Type1>
@@ -317,7 +328,7 @@ impl<T: SumType2 + Clone + 'static> Stream<T>
     }
 }
 
-impl<T: Clone + 'static> Stream<Stream<T>>
+impl<T: 'static> Stream<Stream<T>>
 {
     /// Listens to the events from the last stream sent to a nested stream
     pub fn switch(&self) -> Stream<T>
@@ -339,5 +350,13 @@ impl<T: Clone + 'static> Stream<Stream<T>>
             true
         });
         Stream{ cbs: new_cbs, source: Some(Rc::new(self.clone())) }
+    }
+}
+
+impl<T> Clone for Stream<T>
+{
+    fn clone(&self) -> Self
+    {
+        Stream{ cbs: self.cbs.clone(), source: self.source.clone() }
     }
 }
