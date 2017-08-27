@@ -172,3 +172,36 @@ impl<T: fmt::Debug> fmt::Debug for Signal<T>
         }
     }
 }
+
+
+#[cfg(test)]
+mod tests
+{
+    use super::*;
+    use std::rc::Rc;
+    use std::cell::Cell;
+    use std::time::Instant;
+
+    #[test]
+    fn signal_basic()
+    {
+        let signal = Signal::constant(42);
+        assert_eq!(signal.sample(), 42);
+        signal.sample_with(|val| assert_eq!(*val, 42));
+
+        let t = Instant::now();
+        let signal = Signal::from_fn(move || t);
+        assert_eq!(signal.sample(), t);
+        signal.sample_with(|val| assert_eq!(*val, t));
+
+        let n = Rc::new(Cell::new(1));
+        let cloned = n.clone();
+        let signal = Signal::from_fn(move || cloned.get());
+        let double = signal.map(|a| *a * 2);
+        assert_eq!(signal.sample(), 1);
+        assert_eq!(double.sample(), 2);
+        n.set(13);
+        assert_eq!(signal.sample(), 13);
+        assert_eq!(double.sample(), 26);
+    }
+}

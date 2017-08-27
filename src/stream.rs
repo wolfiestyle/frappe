@@ -360,3 +360,49 @@ impl<T> Clone for Stream<T>
         Stream{ cbs: self.cbs.clone(), source: self.source.clone() }
     }
 }
+
+
+#[cfg(test)]
+mod tests
+{
+    use super::*;
+
+    #[test]
+    fn stream_basic()
+    {
+        let sink = Sink::new();
+        let stream = sink.stream();
+        let rx = stream.channel();
+
+        sink.send(42);
+        sink.send(33);
+        sink.feed(0..5);
+
+        let result: Vec<_> = rx.try_iter().collect();
+        assert_eq!(result, [42, 33, 0, 1, 2, 3, 4]);
+    }
+
+    #[test]
+    fn stream_switch()
+    {
+        let stream_sink = Sink::new();
+        let sink1 = Sink::new();
+        let sink2 = Sink::new();
+
+        let switched = stream_sink.stream().switch();
+        let events = switched.channel();
+
+        sink1.send(1);
+        sink2.send(2);
+
+        stream_sink.send(sink2.stream());
+        sink1.send(3);
+        sink2.send(4);
+        assert_eq!(events.try_recv(), Ok(4));
+
+        stream_sink.send(sink1.stream());
+        sink1.send(5);
+        sink2.send(6);
+        assert_eq!(events.try_recv(), Ok(5));
+    }
+}

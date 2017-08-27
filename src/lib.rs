@@ -14,6 +14,3 @@ mod macros;
 
 pub use stream::{Sink, Stream};
 pub use signal::Signal;
-
-#[cfg(test)]
-mod tests;
