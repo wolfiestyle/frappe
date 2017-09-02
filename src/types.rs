@@ -86,9 +86,9 @@ impl<T> Callbacks<T>
 
     fn call_ref(&self, arg: &T)
     {
-        let n_dead = self.fs.borrow().iter().fold(0, |a, f| {
-            if f.call(MaybeOwned::Borrowed(arg)) { a } else { a + 1 }
-        });
+        let n_dead = self.fs.borrow().iter()
+            .map(|f| f.call(MaybeOwned::Borrowed(arg)))
+            .fold(0, |a, alive| if alive { a } else { a + 1 });
 
         if n_dead > 0 { self.cleanup(n_dead); }
     }
