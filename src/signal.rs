@@ -31,6 +31,7 @@ pub enum Signal<T>
 
 impl<T> Signal<T>
 {
+    /// Creates a signal with constant value.
     pub fn constant<V: Into<Rc<T>>>(val: V) -> Self
     {
         Signal::Constant(val.into())

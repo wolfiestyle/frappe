@@ -1,4 +1,5 @@
 //! Functional Reactive Programming library for Rust
+#![warn(missing_docs)]
 
 pub extern crate maybe_owned;
 #[cfg(feature="either")]

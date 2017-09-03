@@ -139,16 +139,24 @@ impl<T> Default for Callbacks<T>
 /// It's used to provide generics over the `Option`/`Result`/`Either` types
 pub trait SumType2
 {
+    /// Type of the first variant.
     type Type1;
+    /// Type of the second variant.
     type Type2;
 
+    /// Creates a value using the first variant.
     fn from_type1(val: Self::Type1) -> Self;
+    /// Creates a value using the second variant.
     fn from_type2(val: Self::Type2) -> Self;
 
+    /// Checks if the value is of the first variant.
     fn is_type1(&self) -> bool;
+    /// Checks if the value is of the second variant.
     fn is_type2(&self) -> bool;
 
+    /// Attempts to extract the value contained on the first variant.
     fn into_type1(self) -> Option<Self::Type1>;
+    /// Attempts to extract the value contained on the second variant.
     fn into_type2(self) -> Option<Self::Type2>;
 }
 
