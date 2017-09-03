@@ -1,5 +1,5 @@
 use std::rc::Rc;
-use std::sync::{Arc, RwLock};
+use std::cell::RefCell;
 use std::any::Any;
 use std::fmt;
 use stream::Stream;
@@ -20,7 +20,7 @@ pub enum Signal<T>
     ///
     /// This is produced by stream methods that create a signal.
     /// It also can contain a reference to it's parent stream to avoid it's deletion.
-    Shared(Arc<RwLock<T>>, Option<Rc<Any>>),
+    Shared(Rc<RefCell<T>>, Option<Rc<Any>>),
     /// A signal that generates it's values from a function.
     ///
     /// This is produced by `Signal::map`
@@ -45,16 +45,6 @@ impl<T> Signal<T>
         Signal::Dynamic(Rc::new(f))
     }
 
-    /// Attempts to extract the inner storage from a signal.
-    ///
-    /// The returned value can be moved across threads and converted back into a signal.
-    /// This also drops the reference to it's parent signal, so it can delete the signal
-    /// chain as a side effect.
-    pub fn into_rwlock(self) -> Result<Arc<RwLock<T>>, Self>
-    {
-        if let Signal::Shared(val, _) = self { Ok(val) } else { Err(self) }
-    }
-
     /// Sample by reference.
     ///
     /// This is meant to be the most efficient way when cloning is undesirable,
@@ -65,7 +55,7 @@ impl<T> Signal<T>
         match *self
         {
             Signal::Constant(ref val) => cb(MaybeOwned::Borrowed(val)),
-            Signal::Shared(ref val, _) => cb(MaybeOwned::Borrowed(&val.read().unwrap())),
+            Signal::Shared(ref val, _) => cb(MaybeOwned::Borrowed(&val.borrow())),
             Signal::Dynamic(ref f) => cb(MaybeOwned::Owned(f())),
             Signal::Nested(ref f) => f().sample_with(cb),
         }
@@ -82,7 +72,7 @@ impl<T: Clone> Signal<T>
         match *self
         {
             Signal::Constant(ref val) => (**val).clone(),
-            Signal::Shared(ref val, _) => val.read().unwrap().clone(),
+            Signal::Shared(ref val, _) => val.borrow().clone(),
             Signal::Dynamic(ref f) => f(),
             Signal::Nested(ref f) => f().sample(),
         }
@@ -136,9 +126,9 @@ impl<T> From<Rc<T>> for Signal<T>
     }
 }
 
-impl<T> From<Arc<RwLock<T>>> for Signal<T>
+impl<T> From<Rc<RefCell<T>>> for Signal<T>
 {
-    fn from(val: Arc<RwLock<T>>) -> Self
+    fn from(val: Rc<RefCell<T>>) -> Self
     {
         Signal::Shared(val, None)
     }

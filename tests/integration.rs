@@ -58,21 +58,23 @@ fn merge_with()
 #[test]
 fn stream_channel()
 {
-    let sink = Sink::new();
-    let rx = sink.stream().channel();
+    use std::sync::mpsc::channel;
 
-    let thread = std::thread::spawn(move || {
+    let sink = Sink::new();
+    let input = sink.stream().channel();
+    let (output, result) = channel();
+
+    std::thread::spawn(move || {
         let sink2 = Sink::new();
         let s_sum = sink2.stream().fold(0, |a, n| a + *n);
-        sink2.feed(rx);
-        s_sum.into_rwlock().unwrap()
+        sink2.feed(input);
+        output.send(s_sum.sample())
     });
 
     sink.feed(1..100);
     drop(sink);
 
-    let result: Signal<i32> = thread.join().unwrap().into();
-    assert_eq!(result.sample(), 4950);
+    assert_eq!(result.recv().unwrap(), 4950);
 }
 
 

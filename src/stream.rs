@@ -1,7 +1,7 @@
 use std::rc::Rc;
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::ptr;
-use std::sync::{mpsc, Arc, RwLock};
+use std::sync::mpsc;
 use std::any::Any;
 use helpers::{rc_and_weak, with_weak};
 use types::{Callbacks, SumType2};
@@ -161,12 +161,11 @@ impl<T: 'static> Stream<T>
         where F: Fn(A, MaybeOwned<T>) -> A + 'static,
         A: 'static
     {
-        let storage = Arc::new(RwLock::new(initial));
-        let weak = Arc::downgrade(&storage);
+        let (storage, weak) = rc_and_weak(RefCell::new(initial));
         self.cbs.push(move |arg| {
             weak.upgrade()
                 .map(|st| unsafe {
-                    let acc = &mut *st.write().unwrap();
+                    let acc = &mut *st.borrow_mut();
                     let old = ptr::read(acc);
                     let new = f(old, arg);
                     ptr::write(acc, new);
@@ -185,14 +184,13 @@ impl<T: 'static> Stream<T>
         where F: Fn(A, MaybeOwned<T>) -> A + 'static,
         A: Clone + 'static
     {
-        let storage = Arc::new(RwLock::new(initial));
-        let weak = Arc::downgrade(&storage);
+        let (storage, weak) = rc_and_weak(RefCell::new(initial));
         self.cbs.push(move |arg| {
             weak.upgrade()
                 .map(|st| {
-                    let old = st.read().unwrap().clone();
+                    let old = st.borrow().clone();
                     let new = f(old, arg);
-                    *st.write().unwrap() = new;
+                    *st.borrow_mut() = new;
                 })
                 .is_some()
         });
@@ -242,11 +240,10 @@ impl<T: Clone + 'static> Stream<T>
     pub fn hold_if<F>(&self, initial: T, pred: F) -> Signal<T>
         where F: Fn(&T) -> bool + 'static
     {
-        let storage = Arc::new(RwLock::new(initial));
-        let weak = Arc::downgrade(&storage);
+        let (storage, weak) = rc_and_weak(RefCell::new(initial));
         self.cbs.push(move |arg| {
             weak.upgrade()
-                .map(|st| if pred(&arg) { *st.write().unwrap() = arg.into_owned() })
+                .map(|st| if pred(&arg) { *st.borrow_mut() = arg.into_owned() })
                 .is_some()
         });
 
