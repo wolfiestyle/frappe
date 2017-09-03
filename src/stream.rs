@@ -251,7 +251,7 @@ impl<T: Clone + 'static> Stream<T>
     }
 
     /// Creates a channel and sends the stream events through it.
-    pub fn channel(&self) -> mpsc::Receiver<T>
+    pub fn as_channel(&self) -> mpsc::Receiver<T>
     {
         let (tx, rx) = mpsc::channel();
         self.cbs.push(move |arg| {
@@ -369,7 +369,7 @@ mod tests
     {
         let sink = Sink::new();
         let stream = sink.stream();
-        let rx = stream.channel();
+        let rx = stream.as_channel();
 
         sink.send(42);
         sink.send(33);
@@ -387,7 +387,7 @@ mod tests
         let sink2 = Sink::new();
 
         let switched = stream_sink.stream().switch();
-        let events = switched.channel();
+        let events = switched.as_channel();
 
         sink1.send(1);
         sink2.send(2);

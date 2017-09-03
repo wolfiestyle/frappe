@@ -61,7 +61,7 @@ fn stream_channel()
     use std::sync::mpsc::channel;
 
     let sink = Sink::new();
-    let input = sink.stream().channel();
+    let input = sink.stream().as_channel();
     let (output, result) = channel();
 
     std::thread::spawn(move || {
