@@ -1,6 +1,5 @@
 use std::rc::Rc;
 use std::cell::RefCell;
-use std::any::Any;
 use std::fmt;
 use stream::Stream;
 use maybe_owned::MaybeOwned;
@@ -16,15 +15,14 @@ pub enum Signal<T>
 {
     /// A signal with constant value.
     Constant(Rc<T>),
-    /// A signal that reads from shared data.
-    ///
-    /// This is produced by stream methods that create a signal.
-    /// It also can contain a reference to it's parent stream to avoid it's deletion.
-    Shared(Rc<RefCell<T>>, Option<Rc<Any>>),
     /// A signal that generates it's values from a function.
     ///
     /// This is produced by `Signal::map`
     Dynamic(Rc<Fn() -> T>),
+    /// A signal that contains shared data.
+    ///
+    /// This is produced by stream methods that create a signal.
+    Shared(Rc<Fn() -> Rc<RefCell<T>>>),
     /// A signal that contains a signal, and allows sampling the inner signal directly.
     ///
     /// This is produced by `Signal::switch`
@@ -55,8 +53,12 @@ impl<T> Signal<T>
         match *self
         {
             Signal::Constant(ref val) => cb(MaybeOwned::Borrowed(val)),
-            Signal::Shared(ref val, _) => cb(MaybeOwned::Borrowed(&val.borrow())),
             Signal::Dynamic(ref f) => cb(MaybeOwned::Owned(f())),
+            Signal::Shared(ref f) => {
+                let st = f();
+                let v = st.borrow();
+                cb(MaybeOwned::Borrowed(&v))
+            },
             Signal::Nested(ref f) => f().sample_with(cb),
         }
     }
@@ -72,8 +74,12 @@ impl<T: Clone> Signal<T>
         match *self
         {
             Signal::Constant(ref val) => (**val).clone(),
-            Signal::Shared(ref val, _) => val.borrow().clone(),
             Signal::Dynamic(ref f) => f(),
+            Signal::Shared(ref f) => {
+                let st = f();
+                let v = st.borrow();
+                v.clone()
+            },
             Signal::Nested(ref f) => f().sample(),
         }
     }
@@ -97,6 +103,15 @@ impl<T: 'static> Signal<T>
     {
         let this = self.clone();
         trigger.map(move |b| this.sample_with(|a| f(a, b)))
+    }
+
+    /// Creates a signal from a shared value.
+    pub(crate) fn from_storage<A: 'static>(storage: Rc<RefCell<T>>, keepalive: A) -> Self
+    {
+        Signal::Shared(Rc::new(move || {
+            let _keepalive = &keepalive;
+            storage.clone()
+        }))
     }
 }
 
@@ -126,14 +141,6 @@ impl<T> From<Rc<T>> for Signal<T>
     }
 }
 
-impl<T> From<Rc<RefCell<T>>> for Signal<T>
-{
-    fn from(val: Rc<RefCell<T>>) -> Self
-    {
-        Signal::Shared(val, None)
-    }
-}
-
 // the derive impl adds a `T: Clone` we don't want
 impl<T> Clone for Signal<T>
 {
@@ -142,8 +149,8 @@ impl<T> Clone for Signal<T>
         match *self
         {
             Signal::Constant(ref val) => Signal::Constant(val.clone()),
-            Signal::Shared(ref val, ref r) => Signal::Shared(val.clone(), r.clone()),
             Signal::Dynamic(ref rf) => Signal::Dynamic(rf.clone()),
+            Signal::Shared(ref rf) => Signal::Shared(rf.clone()),
             Signal::Nested(ref rf) => Signal::Nested(rf.clone()),
         }
     }
@@ -156,8 +163,8 @@ impl<T: fmt::Debug> fmt::Debug for Signal<T>
         match *self
         {
             Signal::Constant(ref val) => write!(f, "Signal::Constant({:?})", val),
-            Signal::Shared(ref val, ref r) => write!(f, "Signal::Shared({:?}, {:?})", val, r),
             Signal::Dynamic(ref rf) => write!(f, "Signal::Dynamic(Fn@{:p})", rf),
+            Signal::Shared(ref rf) => write!(f, "Signal::Shared(Fn@{:p})", rf),
             Signal::Nested(ref rf) => write!(f, "Signal::Nested(Fn@{:p})", rf),
         }
     }

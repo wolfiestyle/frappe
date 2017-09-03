@@ -173,7 +173,7 @@ impl<T: 'static> Stream<T>
                 .is_some()
         });
 
-        Signal::Shared(storage, Some(Rc::new(self.clone())))
+        Signal::from_storage(storage, self.clone())
     }
 
     /// Folds the stream without locking the accumulator.
@@ -195,7 +195,7 @@ impl<T: 'static> Stream<T>
                 .is_some()
         });
 
-        Signal::Shared(storage, Some(Rc::new(self.clone())))
+        Signal::from_storage(storage, self.clone())
     }
 
     /// Maps each stream event to `0..N` output values.
@@ -247,7 +247,7 @@ impl<T: Clone + 'static> Stream<T>
                 .is_some()
         });
 
-        Signal::Shared(storage, Some(Rc::new(self.clone())))
+        Signal::from_storage(storage, self.clone())
     }
 
     /// Creates a channel and sends the stream events through it.
