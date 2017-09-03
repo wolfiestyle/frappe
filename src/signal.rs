@@ -22,7 +22,7 @@ pub enum Signal<T>
     /// A signal that contains shared data.
     ///
     /// This is produced by stream methods that create a signal.
-    Shared(Rc<Fn() -> Rc<RefCell<T>>>),
+    Shared(Rc<Fn() -> Rc<RefCell<Option<T>>>>),
     /// A signal that contains a signal, and allows sampling the inner signal directly.
     ///
     /// This is produced by `Signal::switch`
@@ -58,7 +58,7 @@ impl<T> Signal<T>
             Signal::Shared(ref f) => {
                 let st = f();
                 let v = st.borrow();
-                cb(MaybeOwned::Borrowed(&v))
+                cb(MaybeOwned::Borrowed(v.as_ref().expect("storage empty")))
             },
             Signal::Nested(ref f) => f().sample_with(cb),
         }
@@ -79,7 +79,7 @@ impl<T: Clone> Signal<T>
             Signal::Shared(ref f) => {
                 let st = f();
                 let v = st.borrow();
-                v.clone()
+                v.clone().expect("storage empty")
             },
             Signal::Nested(ref f) => f().sample(),
         }
@@ -107,7 +107,7 @@ impl<T: 'static> Signal<T>
     }
 
     /// Creates a signal from a shared value.
-    pub(crate) fn from_storage<A: 'static>(storage: Rc<RefCell<T>>, keepalive: A) -> Self
+    pub(crate) fn from_storage<A: 'static>(storage: Rc<RefCell<Option<T>>>, keepalive: A) -> Self
     {
         Signal::Shared(Rc::new(move || {
             let _keepalive = &keepalive;

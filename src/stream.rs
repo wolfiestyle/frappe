@@ -1,6 +1,5 @@
 use std::rc::Rc;
 use std::cell::{Cell, RefCell};
-use std::ptr;
 use std::sync::mpsc;
 use std::any::Any;
 use helpers::{rc_and_weak, with_weak};
@@ -153,22 +152,22 @@ impl<T: 'static> Stream<T>
 
     /// Accumulates the values sent over this stream.
     ///
-    /// The fold operation is done by locking the accumulator, consuming it's value, and then
-    /// putting back the transformed value. This avoids cloning, but it will cause readers on
-    /// another thread to block if the closure takes too long to execute.
-    /// If you don't want to block, use `Stream::fold_clone` instead.
+    /// The fold operation is done by taking the accumulator, consuming it's value, and then
+    /// putting back the transformed value. This avoids cloning, but if the closure panics it will
+    /// leave the storage empty, and then any sampling attempt on this object will panic until
+    /// someone puts back a value on it.
+    /// If this is undesirable, use `Stream::fold_clone` instead.
     pub fn fold<A, F>(&self, initial: A, f: F) -> Signal<A>
         where F: Fn(A, MaybeOwned<T>) -> A + 'static,
         A: 'static
     {
-        let (storage, weak) = rc_and_weak(RefCell::new(initial));
+        let (storage, weak) = rc_and_weak(RefCell::new(Some(initial)));
         self.cbs.push(move |arg| {
             weak.upgrade()
-                .map(|st| unsafe {
-                    let acc = &mut *st.borrow_mut();
-                    let old = ptr::read(acc);
+                .map(|st| {
+                    let old = st.borrow_mut().take().expect("storage empty");
                     let new = f(old, arg);
-                    ptr::write(acc, new);
+                    *st.borrow_mut() = Some(new);
                 })
                 .is_some()
         });
@@ -176,21 +175,22 @@ impl<T: 'static> Stream<T>
         Signal::from_storage(storage, self.clone())
     }
 
-    /// Folds the stream without locking the accumulator.
+    /// Folds the stream by cloning the accumulator.
     ///
-    /// This will clone the accumulator on every value processed, but it won't block other threads
-    /// reading it if the closure takes too long to execute.
+    /// This will clone the accumulator on every value processed, but if the closure panics, the
+    /// storage will remain unchanged and later attempts at sampling will succeed like nothing
+    /// happened.
     pub fn fold_clone<A, F>(&self, initial: A, f: F) -> Signal<A>
         where F: Fn(A, MaybeOwned<T>) -> A + 'static,
         A: Clone + 'static
     {
-        let (storage, weak) = rc_and_weak(RefCell::new(initial));
+        let (storage, weak) = rc_and_weak(RefCell::new(Some(initial)));
         self.cbs.push(move |arg| {
             weak.upgrade()
                 .map(|st| {
-                    let old = st.borrow().clone();
+                    let old = st.borrow().clone().expect("storage empty");
                     let new = f(old, arg);
-                    *st.borrow_mut() = new;
+                    *st.borrow_mut() = Some(new);
                 })
                 .is_some()
         });
@@ -240,10 +240,10 @@ impl<T: Clone + 'static> Stream<T>
     pub fn hold_if<F>(&self, initial: T, pred: F) -> Signal<T>
         where F: Fn(&T) -> bool + 'static
     {
-        let (storage, weak) = rc_and_weak(RefCell::new(initial));
+        let (storage, weak) = rc_and_weak(RefCell::new(Some(initial)));
         self.cbs.push(move |arg| {
             weak.upgrade()
-                .map(|st| if pred(&arg) { *st.borrow_mut() = arg.into_owned() })
+                .map(|st| if pred(&arg) { *st.borrow_mut() = Some(arg.into_owned()) })
                 .is_some()
         });
 
