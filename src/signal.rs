@@ -1,9 +1,8 @@
 use std::rc::Rc;
-use std::cell::RefCell;
 use std::sync::mpsc;
 use std::fmt;
+use types::{MaybeOwned, Storage};
 use stream::Stream;
-use maybe_owned::MaybeOwned;
 
 /// Represents a continuous value that changes over time.
 ///
@@ -23,7 +22,7 @@ pub enum Signal<T>
     /// A signal that contains shared data.
     ///
     /// This is produced by stream methods that create a signal.
-    Shared(Rc<Fn() -> Rc<RefCell<Option<T>>>>),
+    Shared(Rc<Fn() -> Rc<Storage<T>>>),
     /// A signal that contains a signal, and allows sampling the inner signal directly.
     ///
     /// This is produced by `Signal::switch`
@@ -56,11 +55,7 @@ impl<T> Signal<T>
         {
             Signal::Constant(ref val) => cb(MaybeOwned::Borrowed(val)),
             Signal::Dynamic(ref f) => cb(MaybeOwned::Owned(f())),
-            Signal::Shared(ref f) => {
-                let st = f();
-                let v = st.borrow();
-                cb(MaybeOwned::Borrowed(v.as_ref().expect("storage empty")))
-            },
+            Signal::Shared(ref f) => f().borrow(|val| cb(MaybeOwned::Borrowed(val))),
             Signal::Nested(ref f) => f().sample_with(cb),
         }
     }
@@ -77,11 +72,7 @@ impl<T: Clone> Signal<T>
         {
             Signal::Constant(ref val) => (**val).clone(),
             Signal::Dynamic(ref f) => f(),
-            Signal::Shared(ref f) => {
-                let st = f();
-                let v = st.borrow();
-                v.clone().expect("storage empty")
-            },
+            Signal::Shared(ref f) => f().get(),
             Signal::Nested(ref f) => f().sample(),
         }
     }
@@ -108,7 +99,7 @@ impl<T: 'static> Signal<T>
     }
 
     /// Creates a signal from a shared value.
-    pub(crate) fn from_storage<A: 'static>(storage: Rc<RefCell<Option<T>>>, keepalive: A) -> Self
+    pub(crate) fn from_storage<A: 'static>(storage: Rc<Storage<T>>, keepalive: A) -> Self
     {
         Signal::Shared(Rc::new(move || {
             let _keepalive = &keepalive;
@@ -122,10 +113,10 @@ impl<T: 'static> Signal<T>
     /// (using non-blocking operations) and returns the last value seen.
     pub fn from_channel(initial: T, rx: mpsc::Receiver<T>) -> Self
     {
-        let storage = Rc::new(RefCell::new(Some(initial)));
+        let storage = Rc::new(Storage::new(initial));
         Signal::Shared(Rc::new(move || {
             let last = rx.try_iter().last();
-            if last.is_some() { *storage.borrow_mut() = last; }
+            if let Some(val) = last { storage.set(val); }
             storage.clone()
         }))
     }
@@ -139,11 +130,11 @@ impl<T: 'static> Signal<T>
         where F: Fn(T, V) -> T + 'static,
         V: 'static
     {
-        let storage = Rc::new(RefCell::new(Some(initial)));
+        let storage = Rc::new(Storage::new(initial));
         Signal::Shared(Rc::new(move || {
-            let acc = storage.borrow_mut().take().expect("storage empty");
+            let acc = storage.take();
             let current = rx.try_iter().fold(acc, &f);
-            *storage.borrow_mut() = Some(current);
+            storage.set(current);
             storage.clone()
         }))
     }

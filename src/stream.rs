@@ -1,11 +1,10 @@
 use std::rc::Rc;
-use std::cell::{Cell, RefCell};
+use std::cell::Cell;
 use std::sync::mpsc;
 use std::any::Any;
+use types::{Callbacks, SumType2, MaybeOwned, Storage};
 use helpers::{rc_and_weak, with_weak};
-use types::{Callbacks, SumType2};
 use signal::Signal;
-use maybe_owned::MaybeOwned;
 
 #[cfg(feature="either")]
 use either::Either;
@@ -161,13 +160,13 @@ impl<T: 'static> Stream<T>
         where F: Fn(A, MaybeOwned<T>) -> A + 'static,
         A: 'static
     {
-        let (storage, weak) = rc_and_weak(RefCell::new(Some(initial)));
+        let (storage, weak) = rc_and_weak(Storage::new(initial));
         self.cbs.push(move |arg| {
             weak.upgrade()
                 .map(|st| {
-                    let old = st.borrow_mut().take().expect("storage empty");
+                    let old = st.take();
                     let new = f(old, arg);
-                    *st.borrow_mut() = Some(new);
+                    st.set(new);
                 })
                 .is_some()
         });
@@ -184,13 +183,13 @@ impl<T: 'static> Stream<T>
         where F: Fn(A, MaybeOwned<T>) -> A + 'static,
         A: Clone + 'static
     {
-        let (storage, weak) = rc_and_weak(RefCell::new(Some(initial)));
+        let (storage, weak) = rc_and_weak(Storage::new(initial));
         self.cbs.push(move |arg| {
             weak.upgrade()
                 .map(|st| {
-                    let old = st.borrow().clone().expect("storage empty");
+                    let old = st.get();
                     let new = f(old, arg);
-                    *st.borrow_mut() = Some(new);
+                    st.set(new);
                 })
                 .is_some()
         });
@@ -240,10 +239,10 @@ impl<T: Clone + 'static> Stream<T>
     pub fn hold_if<F>(&self, initial: T, pred: F) -> Signal<T>
         where F: Fn(&T) -> bool + 'static
     {
-        let (storage, weak) = rc_and_weak(RefCell::new(Some(initial)));
+        let (storage, weak) = rc_and_weak(Storage::new(initial));
         self.cbs.push(move |arg| {
             weak.upgrade()
-                .map(|st| if pred(&arg) { *st.borrow_mut() = Some(arg.into_owned()) })
+                .map(|st| if pred(&arg) { st.set(arg.into_owned()); })
                 .is_some()
         });
 

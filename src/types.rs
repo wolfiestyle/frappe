@@ -205,3 +205,47 @@ impl<L, R> SumType2 for ::either::Either<L, R>
     fn into_type1(self) -> Option<Self::Type1> { self.left() }
     fn into_type2(self) -> Option<Self::Type2> { self.right() }
 }
+
+/// Storage cell for shared signal values.
+///
+/// This type is an implementation detail and it shouldn't be used directly.
+#[derive(Debug)]
+pub struct Storage<T>(RefCell<Option<T>>);
+
+const ERR_EMPTY: &'static str = "storage empty";
+
+impl<T> Storage<T>
+{
+    pub(crate) fn new(val: T) -> Self
+    {
+        Storage(RefCell::new(Some(val)))
+    }
+
+    /// Gets the value by cloning.
+    #[inline]
+    pub fn get(&self) -> T
+        where T: Clone
+    {
+        self.0.borrow().clone().expect(ERR_EMPTY)
+    }
+
+    #[inline]
+    pub(crate) fn set(&self, val: T)
+    {
+        *self.0.borrow_mut() = Some(val);
+    }
+
+    #[inline]
+    pub(crate) fn take(&self) -> T
+    {
+        self.0.borrow_mut().take().expect(ERR_EMPTY)
+    }
+
+    /// Gets the value by borrowing it to a closure.
+    #[inline]
+    pub fn borrow<R, F>(&self, f: F) -> R
+        where F: FnOnce(&T) -> R
+    {
+        f(self.0.borrow().as_ref().expect(ERR_EMPTY))
+    }
+}
