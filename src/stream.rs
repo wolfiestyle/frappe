@@ -251,6 +251,9 @@ impl<T: Clone + 'static> Stream<T>
     }
 
     /// Creates a channel and sends the stream events through it.
+    ///
+    /// This doesn't create a strong reference to the parent stream, so the sender will be dropped
+    /// when the stream is deleted.
     pub fn as_channel(&self) -> mpsc::Receiver<T>
     {
         let (tx, rx) = mpsc::channel();
