@@ -204,6 +204,14 @@ impl<T: fmt::Debug> fmt::Debug for Signal<T>
     }
 }
 
+impl<T: fmt::Display> fmt::Display for Signal<T>
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result
+    {
+        self.sample_with(|val| fmt::Display::fmt(&*val, f))
+    }
+}
+
 
 #[cfg(test)]
 mod tests
