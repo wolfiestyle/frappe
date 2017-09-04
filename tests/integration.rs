@@ -63,18 +63,30 @@ fn stream_channel()
     let sink = Sink::new();
     let input = sink.stream().as_channel();
     let (output, result) = channel();
+    let s_result = Signal::from_channel(0, result);
 
-    std::thread::spawn(move || {
+    let thread = std::thread::spawn(move || {
         let sink2 = Sink::new();
-        let s_sum = sink2.stream().fold(0, |a, n| a + *n);
+        let stream = sink2.stream();
+        let s_sum = stream.fold(0, |a, n| a + *n);
+        let doubles = stream.map(|n| *n * 2);
+        let rx_doubles = doubles.as_channel();
+
         sink2.feed(input);
-        output.send(s_sum.sample())
+
+        output.send(s_sum.sample()).unwrap();
+        rx_doubles
     });
+
+    assert_eq!(s_result.sample(), 0);
 
     sink.feed(1..100);
     drop(sink);
 
-    assert_eq!(result.recv().unwrap(), 4950);
+    let doubles = thread.join().unwrap();
+    let s_doubles = Signal::fold_channel(0, doubles, |a, n| a + n);
+    assert_eq!(s_result.sample(), 4950);
+    assert_eq!(s_doubles.sample(), 9900);
 }
 
 

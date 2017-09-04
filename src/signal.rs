@@ -1,5 +1,6 @@
 use std::rc::Rc;
 use std::cell::RefCell;
+use std::sync::mpsc;
 use std::fmt;
 use stream::Stream;
 use maybe_owned::MaybeOwned;
@@ -111,6 +112,38 @@ impl<T: 'static> Signal<T>
     {
         Signal::Shared(Rc::new(move || {
             let _keepalive = &keepalive;
+            storage.clone()
+        }))
+    }
+
+    /// Stores the last value sent to a channel.
+    ///
+    /// When sampled, the resulting signal consumes all the current values on the channel
+    /// (using non-blocking operations) and returns the last value seen.
+    pub fn from_channel(initial: T, rx: mpsc::Receiver<T>) -> Self
+    {
+        let storage = Rc::new(RefCell::new(Some(initial)));
+        Signal::Shared(Rc::new(move || {
+            let last = rx.try_iter().last();
+            if last.is_some() { *storage.borrow_mut() = last; }
+            storage.clone()
+        }))
+    }
+
+    /// Creates a signal that folds the values from a channel.
+    ///
+    /// When sampled, the resulting signal consumes all the current values on the channel
+    /// (using non-blocking operations) and folds them using the current signal value as the
+    /// initial accumulator state.
+    pub fn fold_channel<V, F>(initial: T, rx: mpsc::Receiver<V>, f: F) -> Self
+        where F: Fn(T, V) -> T + 'static,
+        V: 'static
+    {
+        let storage = Rc::new(RefCell::new(Some(initial)));
+        Signal::Shared(Rc::new(move || {
+            let acc = storage.borrow_mut().take().expect("storage empty");
+            let current = rx.try_iter().fold(acc, &f);
+            *storage.borrow_mut() = Some(current);
             storage.clone()
         }))
     }
