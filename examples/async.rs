@@ -1,5 +1,7 @@
 extern crate frappe;
+extern crate rand;
 use frappe::Sink;
+use rand::Rng;
 
 use std::rc::Rc;
 use std::cell::RefCell;
@@ -28,6 +30,11 @@ impl Updater
         where F: Fn() -> bool + 'static
     {
         self.jobs.borrow_mut().push(Box::new(f));
+    }
+
+    fn get_main_thread(&self) -> Thread
+    {
+        self.main_thread.clone()
     }
 
     fn update(&self)
@@ -59,8 +66,8 @@ fn main()
         .map_n(move |arg, sink_| {
             let n = *arg;
             let (tx, rx) = mpsc::channel();
-            let main_th = upd.main_thread.clone();
-            // sleep sort
+            let main_th = upd.get_main_thread();
+            // our expensive computation (sleep sort)
             thread::spawn(move || {
                 thread::sleep(Duration::from_millis(n));
                 tx.send(n).unwrap();
@@ -72,7 +79,8 @@ fn main()
         // rest of the chain continues on the main thread
         .fold(vec![], |mut vec, n| { vec.push(*n); vec });
 
-    sink.feed(vec![5, 6, 10, 42, 1, 94, 22, 33, 7]);
+    let mut rng = rand::thread_rng();
+    sink.feed((0..10).map(|_| rng.gen_range(0, 100)));
 
     // the main loop dispatches results back to the stream
     while updater.pending()
