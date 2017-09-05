@@ -1,11 +1,8 @@
 #[macro_use]
 extern crate frappe;
 use frappe::{Sink, Stream, Signal};
-use frappe::types::MaybeOwned;
 use std::rc::Rc;
 use std::fmt::Debug;
-
-fn vec_cons<T: Clone>(mut v: Vec<T>, x: MaybeOwned<T>) -> Vec<T> { v.push(x.into_owned()); v }
 
 #[test]
 fn stream_operations()
@@ -13,15 +10,15 @@ fn stream_operations()
     let sink: Sink<i32> = Sink::new();
     let stream = sink.stream();
 
-    let s_string = stream.map(|a| a.to_string()).fold(vec![], vec_cons);
-    let s_odd = stream.filter(|a| a % 2 != 0).fold(vec![], vec_cons);
-    let s_even_half = stream.filter_map(|a| if *a % 2 == 0 { Some(*a / 2) } else { None }).fold(vec![], vec_cons);
+    let s_string = stream.map(|a| a.to_string()).collect::<Vec<_>>();
+    let s_odd = stream.filter(|a| a % 2 != 0).collect::<Vec<_>>();
+    let s_even_half = stream.filter_map(|a| if *a % 2 == 0 { Some(*a / 2) } else { None }).collect::<Vec<_>>();
     let (pos, neg) = stream.map(|a| if *a > 0 { Ok(*a) } else { Err(*a) }).split();
-    let s_pos = pos.fold(vec![], vec_cons);
-    let s_neg = neg.fold(vec![], vec_cons);
-    let s_merged = pos.merge(&neg.map(|a| -*a)).fold(vec![], vec_cons);
-    let s_accum = stream.fold(vec![], vec_cons).snapshot(&stream, |s, _| s.into_owned()).fold(vec![], vec_cons);
-    let s_cloned = stream.fold_clone(vec![], vec_cons);
+    let s_pos = pos.collect::<Vec<_>>();
+    let s_neg = neg.collect::<Vec<_>>();
+    let s_merged = pos.merge(&neg.map(|a| -*a)).collect::<Vec<_>>();
+    let s_accum = stream.collect::<Vec<_>>().snapshot(&stream, |s, _| s.into_owned()).collect::<Vec<_>>();
+    let s_cloned = stream.fold_clone(vec![], |mut a, v| { a.push(v.into_owned()); a });
     let s_last_pos = stream.hold_if(0, |a| *a > 0);
 
     sink.feed(vec![5, 8, 13, -2, 42, -33]);
@@ -44,7 +41,7 @@ fn merge_with()
     let sink1: Sink<i32> = Sink::new();
     let sink2: Sink<f32> = Sink::new();
     let stream: Stream<Result<_, _>> = sink1.stream().merge_with(&sink2.stream(), |e| e.either(|l| Ok(*l), |r| Err(*r)));
-    let result = stream.fold(vec![], vec_cons);
+    let result = stream.collect::<Vec<_>>();
 
     sink1.send(1);
     sink2.send(2.0);
@@ -134,9 +131,9 @@ fn filter_extra()
     let stream = sink.stream();
     let sign_res = stream.map(|a| if *a >= 0 { Ok(*a) } else { Err(*a) });
     let even_opt = stream.map(|a| if *a % 2 == 0 { Some(*a) } else { None });
-    let s_even = even_opt.filter_some().fold(vec![], vec_cons);
-    let s_pos = sign_res.filter_first().fold(vec![], vec_cons);
-    let s_neg = sign_res.filter_second().fold(vec![], vec_cons);
+    let s_even = even_opt.filter_some().collect::<Vec<_>>();
+    let s_pos = sign_res.filter_first().collect::<Vec<_>>();
+    let s_neg = sign_res.filter_second().collect::<Vec<_>>();
 
     sink.feed(vec![1, 8, -3, 42, -66]);
 
@@ -196,7 +193,7 @@ fn map_n()
     let sink = Sink::new();
     let s_out = sink.stream()
         .map_n(|a, sink| for _ in 0 .. *a { sink.send(*a) })
-        .fold(vec![], vec_cons);
+        .collect::<Vec<_>>();
 
     sink.feed(0..4);
 
@@ -215,4 +212,40 @@ fn lift()
     assert_eq!(res.sample(), 40);
     sink2.send(2);
     assert_eq!(res.sample(), 42);
+}
+
+#[test]
+fn stream_collect()
+{
+    use std::collections::*;
+    use std::cmp::Ordering;
+
+    let sink = Sink::new();
+    let stream = sink.stream();
+    let s_vec: Signal<Vec<_>> = stream.collect();
+    let s_vecdq: Signal<VecDeque<_>> = stream.collect();
+    let s_list: Signal<LinkedList<_>> = stream.collect();
+    let s_set: Signal<BTreeSet<_>> = stream.collect();
+    let s_string: Signal<String> = stream.map(|v| format!("{} ", *v)).collect();
+
+    sink.send(1);
+    sink.send(3);
+    sink.send(-42);
+    sink.send(2);
+
+    assert_eq!(s_vec.sample(), [1, 3, -42, 2]);
+    assert_eq!(s_vecdq.sample(), [1, 3, -42, 2]);
+    assert_eq!(s_list.sample().iter().cmp([1, 3, -42, 2].iter()), Ordering::Equal);
+    assert_eq!(s_set.sample().iter().cmp([-42, 1, 2, 3].iter()), Ordering::Equal);
+    assert_eq!(s_string.sample(), "1 3 -42 2 ");
+
+    let sink = Sink::new();
+    let s_string: Signal<String> = sink.stream().collect();
+
+    sink.send('a');
+    sink.send('b');
+    sink.send('Z');
+    sink.send('c');
+
+    assert_eq!(s_string.sample(), "abZc");
 }

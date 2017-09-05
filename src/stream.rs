@@ -2,6 +2,7 @@ use std::rc::Rc;
 use std::cell::Cell;
 use std::sync::mpsc;
 use std::any::Any;
+use std::iter;
 use types::{Callbacks, SumType2, MaybeOwned, Storage};
 use helpers::{rc_and_weak, with_weak};
 use signal::Signal;
@@ -247,6 +248,17 @@ impl<T: Clone + 'static> Stream<T>
         });
 
         Signal::from_storage(storage, self.clone())
+    }
+
+    /// Creates a collection from the values of this stream.
+    #[inline]
+    pub fn collect<C>(&self) -> Signal<C>
+        where C: Default + Extend<T> + 'static
+    {
+        self.fold(C::default(), |mut a, v| {
+            a.extend(iter::once(v.into_owned()));
+            a
+        })
     }
 
     /// Creates a channel and sends the stream events through it.
