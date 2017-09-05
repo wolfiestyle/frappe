@@ -1,7 +1,9 @@
 # frappe - FRP library for Rust
 
 Functional Reactive Programming library inspired by [Carboxyl](https://github.com/aepsil0n/carboxyl).
-It's designed to efficiently pass objects around by avoiding cloning as much as possible.
+It's designed to efficiently pass objects around by avoiding cloning as much as possible, and by
+avoiding atomic operations (only Rc/RefCell used). Because of that threading is not directly supported,
+but instead it provides methods to interface with channels.
 
 [Documentation](https://docs.rs/frappe)
 
