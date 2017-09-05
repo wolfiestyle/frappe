@@ -77,7 +77,7 @@ fn main()
             upd.register(move || rx.try_recv().map(|v| sink_.send(v)).is_ok());
         })
         // rest of the chain continues on the main thread
-        .fold(vec![], |mut vec, n| { vec.push(*n); vec });
+        .collect::<Vec<_>>();
 
     let mut rng = rand::thread_rng();
     sink.feed((0..10).map(|_| rng.gen_range(0, 100)));

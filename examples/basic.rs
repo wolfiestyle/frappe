@@ -12,12 +12,12 @@ fn main()
     // `hold` creates a Signal that stores the last value sent to the stream
     let last = stream.hold(0);
     // filter/map/fold are analogous to Iterator operations
-    // most callbacks receive a Cow<T> argument, so we need to deref the value
+    // most callbacks receive a MaybeOwned<T> argument, so we need to deref the value
     let sum = stream.fold(0, |acc, n| acc + *n);
     let half_even = stream
         .filter(|n| n % 2 == 0)
         .map(|n| *n / 2)
-        .fold(vec![], |mut vec, n| { vec.push(*n); vec });
+        .collect::<Vec<_>>();
 
     // can send individual values
     sink.send(6);
@@ -28,7 +28,8 @@ fn main()
 
     // `sample` gets a copy of the value stored in the signal
     println!("last: {}", last.sample());
-    println!("sum: {}", sum.sample());
-    // `sample_with` gets a reference to the interval value, no clone needed
+    // printing a signal samples it
+    println!("sum: {}", sum);
+    // `sample_with` gets a reference to the internal value, no clone needed
     half_even.sample_with(|v| println!("half_even: {:?}", v));
 }
