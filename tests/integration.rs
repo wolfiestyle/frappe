@@ -226,7 +226,7 @@ fn stream_collect()
     let s_vecdq: Signal<VecDeque<_>> = stream.collect();
     let s_list: Signal<LinkedList<_>> = stream.collect();
     let s_set: Signal<BTreeSet<_>> = stream.collect();
-    let s_string: Signal<String> = stream.map(|v| format!("{} ", *v)).collect();
+    let s_string: Signal<String> = stream.map(|v| format!("{} ", v)).collect();
 
     sink.feed_ref(&[1, 3, -42, 2]);
 

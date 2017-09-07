@@ -21,7 +21,7 @@ fn first_order(n_sinks: usize, n_steps: usize, b: &mut Bencher) {
     // Setup network
     let sinks: Vec<Sink<String>> = (0..n_sinks).map(|_| Sink::new()).collect();
     let _printers: Vec<Stream<()>> = sinks.iter()
-        .map(|sink| sink.stream().map(|s| { format!("{}", *s); }))
+        .map(|sink| sink.stream().map(|s| { format!("{}", s); }))
         .collect();
 
     // Feed events
