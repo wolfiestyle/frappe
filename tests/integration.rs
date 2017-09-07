@@ -91,7 +91,7 @@ fn stream_channel()
 fn signal_switch()
 {
     let signal_sink = Sink::new();
-    let switched = signal_sink.stream().hold(Signal::constant(0)).switch();
+    let switched = signal_sink.stream().hold(Default::default()).switch();
 
     signal_sink.send(Signal::constant(1));
     assert_eq!(switched.sample(), 1);

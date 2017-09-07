@@ -77,14 +77,17 @@ pub struct Stream<T>
     source: Option<Rc<Any>>,  // strong reference to a parent Stream
 }
 
-impl<T: 'static> Stream<T>
+impl<T> Stream<T>
 {
     /// Creates a stream that never fires.
     pub fn never() -> Self
     {
         Stream{ cbs: Default::default(), source: None }
     }
+}
 
+impl<T: 'static> Stream<T>
+{
     /// Maps this stream into another stream using the provided function.
     #[inline]
     pub fn map<F, R>(&self, f: F) -> Stream<R>
@@ -369,6 +372,14 @@ impl<T> Clone for Stream<T>
     fn clone(&self) -> Self
     {
         Stream{ cbs: self.cbs.clone(), source: self.source.clone() }
+    }
+}
+
+impl<T> Default for Stream<T>
+{
+    fn default() -> Self
+    {
+        Stream::never()
     }
 }
 
