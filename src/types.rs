@@ -196,8 +196,8 @@ impl<L, R> SumType2 for ::either::Either<L, R>
     type Type1 = L;
     type Type2 = R;
 
-    fn from_type1(val: Self::Type1) -> Self { ::either::Either::Left(val) }
-    fn from_type2(val: Self::Type2) -> Self { ::either::Either::Right(val) }
+    fn from_type1(val: Self::Type1) -> Self { Either::Left(val) }
+    fn from_type2(val: Self::Type2) -> Self { Either::Right(val) }
 
     fn is_type1(&self) -> bool { self.is_left() }
     fn is_type2(&self) -> bool { self.is_right() }
