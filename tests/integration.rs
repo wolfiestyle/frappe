@@ -21,7 +21,7 @@ fn stream_operations()
     let s_cloned = stream.fold_clone(vec![], |mut a, v| { a.push(v.into_owned()); a });
     let s_last_pos = stream.hold_if(0, |a| *a > 0);
 
-    sink.feed(vec![5, 8, 13, -2, 42, -33]);
+    sink.feed_ref(&[5, 8, 13, -2, 42, -33]);
 
     assert_eq!(s_string.sample(), ["5", "8", "13", "-2", "42", "-33"]);
     assert_eq!(s_odd.sample(), [5, 13, -33]);
@@ -135,7 +135,7 @@ fn filter_extra()
     let s_pos = sign_res.filter_first().collect::<Vec<_>>();
     let s_neg = sign_res.filter_second().collect::<Vec<_>>();
 
-    sink.feed(vec![1, 8, -3, 42, -66]);
+    sink.feed_ref(&[1, 8, -3, 42, -66]);
 
     assert_eq!(s_even.sample(), [8, 42, -66]);
     assert_eq!(s_pos.sample(), [1, 8, 42]);
@@ -228,10 +228,7 @@ fn stream_collect()
     let s_set: Signal<BTreeSet<_>> = stream.collect();
     let s_string: Signal<String> = stream.map(|v| format!("{} ", *v)).collect();
 
-    sink.send(1);
-    sink.send(3);
-    sink.send(-42);
-    sink.send(2);
+    sink.feed_ref(&[1, 3, -42, 2]);
 
     assert_eq!(s_vec.sample(), [1, 3, -42, 2]);
     assert_eq!(s_vecdq.sample(), [1, 3, -42, 2]);
@@ -242,10 +239,7 @@ fn stream_collect()
     let sink = Sink::new();
     let s_string: Signal<String> = sink.stream().collect();
 
-    sink.send('a');
-    sink.send('b');
-    sink.send('Z');
-    sink.send('c');
+    sink.feed("abZc".chars());
 
     assert_eq!(s_string.sample(), "abZc");
 }

@@ -38,7 +38,14 @@ impl<T> Sink<T>
         self.cbs.call(val)
     }
 
-    /// Sends values from an Iterator into the sink.
+    /// Sends a value by reference.
+    #[inline]
+    pub fn send_ref(&self, val: &T)
+    {
+        self.cbs.call_ref(val)
+    }
+
+    /// Sends multiple values into the sink.
     #[inline]
     pub fn feed<I>(&self, iter: I)
         where I: IntoIterator<Item=T>
@@ -46,6 +53,17 @@ impl<T> Sink<T>
         for val in iter
         {
             self.cbs.call(val)
+        }
+    }
+
+    /// Sends multiple values by reference.
+    #[inline]
+    pub fn feed_ref<'a, I>(&self, iter: I)
+        where T: 'a, I: IntoIterator<Item=&'a T>
+    {
+        for val in iter
+        {
+            self.cbs.call_ref(val)
         }
     }
 }
@@ -398,10 +416,12 @@ mod tests
 
         sink.send(42);
         sink.send(33);
+        sink.send_ref(&12);
         sink.feed(0..5);
+        sink.feed_ref(&[11, 22, 33]);
 
         let result: Vec<_> = rx.try_iter().collect();
-        assert_eq!(result, [42, 33, 0, 1, 2, 3, 4]);
+        assert_eq!(result, [42, 33, 12, 0, 1, 2, 3, 4, 11, 22, 33]);
     }
 
     #[test]

@@ -84,7 +84,7 @@ impl<T> Callbacks<T>
         if n_dead > 0 { self.cleanup(n_dead); }
     }
 
-    fn call_ref(&self, arg: &T)
+    pub fn call_ref(&self, arg: &T)
     {
         let n_dead = self.fs.borrow().iter()
             .map(|f| f.call(MaybeOwned::Borrowed(arg)))
