@@ -152,6 +152,8 @@ impl<T: 'static> Signal<Signal<T>>
 
 impl<T: Default> Default for Signal<T>
 {
+    /// Creates a constant signal with T's default value.
+    #[inline]
     fn default() -> Self
     {
         Signal::constant(T::default())
@@ -160,6 +162,7 @@ impl<T: Default> Default for Signal<T>
 
 impl<T> From<T> for Signal<T>
 {
+    #[inline]
     fn from(val: T) -> Self
     {
         Signal::constant(val)
@@ -168,6 +171,7 @@ impl<T> From<T> for Signal<T>
 
 impl<T> From<Rc<T>> for Signal<T>
 {
+    #[inline]
     fn from(val: Rc<T>) -> Self
     {
         Signal::Constant(val)
@@ -176,6 +180,7 @@ impl<T> From<Rc<T>> for Signal<T>
 
 impl<T> From<Rc<Fn() -> T>> for Signal<T>
 {
+    #[inline]
     fn from(f: Rc<Fn() -> T>) -> Self
     {
         Signal::Dynamic(f)

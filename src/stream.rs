@@ -70,6 +70,8 @@ impl<T> Sink<T>
 
 impl<T> Default for Sink<T>
 {
+    /// Creates a new sink.
+    #[inline]
     fn default() -> Self
     {
         Sink::new()
@@ -395,6 +397,8 @@ impl<T> Clone for Stream<T>
 
 impl<T> Default for Stream<T>
 {
+    /// Creates a stream that never fires.
+    #[inline]
     fn default() -> Self
     {
         Stream::never()
