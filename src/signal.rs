@@ -47,7 +47,7 @@ impl<T> Signal<T>
     /// Sample by reference.
     ///
     /// This is meant to be the most efficient way when cloning is undesirable,
-    /// but it requires a callback to prevent outliving internal `RwLock` borrows.
+    /// but it requires a callback to prevent outliving internal borrows.
     pub fn sample_with<F, R>(&self, cb: F) -> R
         where F: FnOnce(MaybeOwned<T>) -> R
     {
