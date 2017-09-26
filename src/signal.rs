@@ -4,14 +4,16 @@ use std::fmt;
 use types::{MaybeOwned, Storage};
 use stream::Stream;
 
+use self::SigValue::*;
+
 /// Represents a continuous value that changes over time.
 ///
 /// Signals are usually constructed by stream operations and can be read using the `sample` or
 /// `sample_with` methods.
-///
-/// This type is meant to be used as a black box, but you can fiddle with the enum variants if
-/// you know what you're doing.
-pub enum Signal<T>
+#[derive(Debug)]
+pub struct Signal<T>(SigValue<T>);
+
+enum SigValue<T>
 {
     /// A signal with constant value.
     Constant(Rc<T>),
@@ -34,14 +36,14 @@ impl<T> Signal<T>
     /// Creates a signal with constant value.
     pub fn constant<V: Into<Rc<T>>>(val: V) -> Self
     {
-        Signal::Constant(val.into())
+        Signal(Constant(val.into()))
     }
 
     /// Creates a signal that samples it's values from the supplied function.
     pub fn from_fn<F>(f: F) -> Self
         where F: Fn() -> T + 'static
     {
-        Signal::Dynamic(Rc::new(f))
+        Signal(Dynamic(Rc::new(f)))
     }
 
     /// Sample by reference.
@@ -51,12 +53,12 @@ impl<T> Signal<T>
     pub fn sample_with<F, R>(&self, cb: F) -> R
         where F: FnOnce(MaybeOwned<T>) -> R
     {
-        match *self
+        match self.0
         {
-            Signal::Constant(ref val) => cb(MaybeOwned::Borrowed(val)),
-            Signal::Dynamic(ref f) => cb(MaybeOwned::Owned(f())),
-            Signal::Shared(ref f) => f().borrow(|val| cb(MaybeOwned::Borrowed(val))),
-            Signal::Nested(ref f) => f().sample_with(cb),
+            Constant(ref val) => cb(MaybeOwned::Borrowed(val)),
+            Dynamic(ref f) => cb(MaybeOwned::Owned(f())),
+            Shared(ref f) => f().borrow(|val| cb(MaybeOwned::Borrowed(val))),
+            Nested(ref f) => f().sample_with(cb),
         }
     }
 }
@@ -68,12 +70,12 @@ impl<T: Clone> Signal<T>
     /// This will clone the content of the signal.
     pub fn sample(&self) -> T
     {
-        match *self
+        match self.0
         {
-            Signal::Constant(ref val) => (**val).clone(),
-            Signal::Dynamic(ref f) => f(),
-            Signal::Shared(ref f) => f().get(),
-            Signal::Nested(ref f) => f().sample(),
+            Constant(ref val) => (**val).clone(),
+            Dynamic(ref f) => f(),
+            Shared(ref f) => f().get(),
+            Nested(ref f) => f().sample(),
         }
     }
 }
@@ -101,10 +103,10 @@ impl<T: 'static> Signal<T>
     /// Creates a signal from a shared value.
     pub(crate) fn from_storage<A: 'static>(storage: Rc<Storage<T>>, keepalive: A) -> Self
     {
-        Signal::Shared(Rc::new(move || {
+        Signal(Shared(Rc::new(move || {
             let _keepalive = &keepalive;
             storage.clone()
-        }))
+        })))
     }
 
     /// Stores the last value sent to a channel.
@@ -114,11 +116,11 @@ impl<T: 'static> Signal<T>
     pub fn from_channel(initial: T, rx: mpsc::Receiver<T>) -> Self
     {
         let storage = Rc::new(Storage::new(initial));
-        Signal::Shared(Rc::new(move || {
+        Signal(Shared(Rc::new(move || {
             let last = rx.try_iter().last();
             if let Some(val) = last { storage.set(val); }
             storage.clone()
-        }))
+        })))
     }
 
     /// Creates a signal that folds the values from a channel.
@@ -131,12 +133,12 @@ impl<T: 'static> Signal<T>
         V: 'static
     {
         let storage = Rc::new(Storage::new(initial));
-        Signal::Shared(Rc::new(move || {
+        Signal(Shared(Rc::new(move || {
             let acc = storage.take();
             let current = rx.try_iter().fold(acc, &f);
             storage.set(current);
             storage.clone()
-        }))
+        })))
     }
 }
 
@@ -146,7 +148,7 @@ impl<T: 'static> Signal<Signal<T>>
     pub fn switch(&self) -> Signal<T>
     {
         let this = self.clone();
-        Signal::Nested(Rc::new(move || this.sample()))
+        Signal(Nested(Rc::new(move || this.sample())))
     }
 }
 
@@ -174,7 +176,7 @@ impl<T> From<Rc<T>> for Signal<T>
     #[inline]
     fn from(val: Rc<T>) -> Self
     {
-        Signal::Constant(val)
+        Signal(Constant(val))
     }
 }
 
@@ -183,7 +185,7 @@ impl<T> From<Rc<Fn() -> T>> for Signal<T>
     #[inline]
     fn from(f: Rc<Fn() -> T>) -> Self
     {
-        Signal::Dynamic(f)
+        Signal(Dynamic(f))
     }
 }
 
@@ -192,26 +194,26 @@ impl<T> Clone for Signal<T>
 {
     fn clone(&self) -> Self
     {
-        match *self
+        match self.0
         {
-            Signal::Constant(ref val) => Signal::Constant(val.clone()),
-            Signal::Dynamic(ref rf) => Signal::Dynamic(rf.clone()),
-            Signal::Shared(ref rf) => Signal::Shared(rf.clone()),
-            Signal::Nested(ref rf) => Signal::Nested(rf.clone()),
+            Constant(ref val) => Signal(Constant(val.clone())),
+            Dynamic(ref rf) => Signal(Dynamic(rf.clone())),
+            Shared(ref rf) => Signal(Shared(rf.clone())),
+            Nested(ref rf) => Signal(Nested(rf.clone())),
         }
     }
 }
 
-impl<T: fmt::Debug> fmt::Debug for Signal<T>
+impl<T: fmt::Debug> fmt::Debug for SigValue<T>
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result
     {
         match *self
         {
-            Signal::Constant(ref val) => write!(f, "Signal::Constant({:?})", val),
-            Signal::Dynamic(ref rf) => write!(f, "Signal::Dynamic(Fn@{:p})", rf),
-            Signal::Shared(ref rf) => write!(f, "Signal::Shared(Fn@{:p})", rf),
-            Signal::Nested(ref rf) => write!(f, "Signal::Nested(Fn@{:p})", rf),
+            Constant(ref val) => write!(f, "Constant({:?})", val),
+            Dynamic(ref rf) => write!(f, "Dynamic(Fn@{:p})", rf),
+            Shared(ref rf) => write!(f, "Shared(Fn@{:p})", rf),
+            Nested(ref rf) => write!(f, "Nested(Fn@{:p})", rf),
         }
     }
 }

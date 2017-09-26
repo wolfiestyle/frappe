@@ -207,16 +207,15 @@ impl<L, R> SumType2 for ::either::Either<L, R>
 }
 
 /// Storage cell for shared signal values.
-///
-/// This type is an implementation detail and it shouldn't be used directly.
 #[derive(Debug)]
-pub struct Storage<T>(RefCell<Option<T>>);
+pub(crate) struct Storage<T>(RefCell<Option<T>>);
 
 const ERR_EMPTY: &'static str = "storage empty";
 
 impl<T> Storage<T>
 {
-    pub(crate) fn new(val: T) -> Self
+    #[inline]
+    pub fn new(val: T) -> Self
     {
         Storage(RefCell::new(Some(val)))
     }
@@ -230,13 +229,13 @@ impl<T> Storage<T>
     }
 
     #[inline]
-    pub(crate) fn set(&self, val: T)
+    pub fn set(&self, val: T)
     {
         *self.0.borrow_mut() = Some(val);
     }
 
     #[inline]
-    pub(crate) fn take(&self) -> T
+    pub fn take(&self) -> T
     {
         self.0.borrow_mut().take().expect(ERR_EMPTY)
     }
