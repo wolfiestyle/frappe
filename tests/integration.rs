@@ -92,12 +92,15 @@ fn signal_switch()
 {
     let signal_sink = Sink::new();
     let switched = signal_sink.stream().hold(Default::default()).switch();
+    let double = switched.map(|a| *a * 2);
 
     signal_sink.send(Signal::constant(1));
     assert_eq!(switched.sample(), 1);
+    assert_eq!(double.sample(), 2);
 
-    signal_sink.send(2.into());
+    signal_sink.send(Signal::from_fn(|| 2));
     assert_eq!(switched.sample(), 2);
+    assert_eq!(double.sample(), 4);
 }
 
 #[test]

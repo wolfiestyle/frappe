@@ -208,43 +208,97 @@ impl<L, R> SumType2 for ::either::Either<L, R>
 
 /// Storage cell for shared signal values.
 #[derive(Debug)]
-pub(crate) struct Storage<T>(RefCell<Option<T>>);
+pub(crate) struct Storage<T>
+{
+    val: RefCell<Option<T>>,
+    serial: Cell<SerialId>,
+}
 
 const ERR_EMPTY: &'static str = "storage empty";
 
 impl<T> Storage<T>
 {
-    #[inline]
     pub fn new(val: T) -> Self
     {
-        Storage(RefCell::new(Some(val)))
+        Storage{
+            val: RefCell::new(Some(val)),
+            serial: Cell::new(SerialId::once()),
+        }
+    }
+
+    pub fn empty() -> Self
+    {
+        Storage{
+            val: RefCell::new(None),
+            serial: Default::default(),
+        }
     }
 
     /// Gets the value by cloning.
-    #[inline]
     pub fn get(&self) -> T
         where T: Clone
     {
-        self.0.borrow().clone().expect(ERR_EMPTY)
+        self.val.borrow().clone().expect(ERR_EMPTY)
     }
 
-    #[inline]
     pub fn set(&self, val: T)
     {
-        *self.0.borrow_mut() = Some(val);
+        *self.val.borrow_mut() = Some(val);
+        SerialId::inc_cell(&self.serial);
     }
 
-    #[inline]
+    pub fn set_with_serial(&self, val: T, serial: SerialId)
+    {
+        *self.val.borrow_mut() = Some(val);
+        self.serial.set(serial);
+    }
+
     pub fn take(&self) -> T
     {
-        self.0.borrow_mut().take().expect(ERR_EMPTY)
+        self.val.borrow_mut().take().expect(ERR_EMPTY)
     }
 
     /// Gets the value by borrowing it to a closure.
-    #[inline]
     pub fn borrow<R, F>(&self, f: F) -> R
         where F: FnOnce(&T) -> R
     {
-        f(self.0.borrow().as_ref().expect(ERR_EMPTY))
+        f(self.val.borrow().as_ref().expect(ERR_EMPTY))
+    }
+
+    pub fn get_serial(&self) -> SerialId
+    {
+        self.serial.get()
+    }
+}
+
+/// A counter on how many times a signal value has been modified.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+pub struct SerialId(u64);
+
+impl SerialId
+{
+    /// For constant values.
+    pub(crate) fn once() -> Self
+    {
+        SerialId(1)
+    }
+
+    pub(crate) fn inc(self) -> Self
+    {
+        SerialId(self.0 + 1)
+    }
+
+    pub(crate) fn inc_cell(cell: &Cell<Self>) -> SerialId
+    {
+        let ser = cell.get().inc();
+        cell.set(ser);
+        ser
+    }
+
+    /// Gets the count stored on this object.
+    #[inline]
+    pub fn get(&self) -> u64
+    {
+        self.0
     }
 }

@@ -1,12 +1,13 @@
 use std::rc::Rc;
+use std::cell::Cell;
 use std::sync::mpsc;
 use std::fmt;
-use types::{MaybeOwned, Storage};
+use types::{MaybeOwned, Storage, SerialId};
 use stream::Stream;
 
 use self::SigValue::*;
 
-/// Represents a continuous value that changes over time.
+/// Represents a discrete value that changes over time.
 ///
 /// Signals are usually constructed by stream operations and can be read using the `sample` or
 /// `sample_with` methods.
@@ -19,12 +20,12 @@ enum SigValue<T>
     Constant(Rc<T>),
     /// A signal that generates it's values from a function.
     ///
-    /// This is produced by `Signal::map`
-    Dynamic(Rc<Fn() -> T>),
+    /// This is produced by `Signal::from_fn`
+    Dynamic(Rc<Fn() -> T>, Cell<SerialId>),
     /// A signal that contains shared data.
     ///
     /// This is produced by stream methods that create a signal.
-    Shared(Rc<Fn() -> Rc<Storage<T>>>),
+    Shared(Rc<Fn()>, Rc<Storage<T>>),
     /// A signal that contains a signal, and allows sampling the inner signal directly.
     ///
     /// This is produced by `Signal::switch`
@@ -34,16 +35,36 @@ enum SigValue<T>
 impl<T> Signal<T>
 {
     /// Creates a signal with constant value.
+    ///
+    /// The value is assumed to be constant, so changing it while it's stored on the
+    /// signal is a logic error and will cause unexpected results.
     pub fn constant<V: Into<Rc<T>>>(val: V) -> Self
     {
         Signal(Constant(val.into()))
     }
 
-    /// Creates a signal that samples it's values from the supplied function.
+    /// Creates a signal that samples it's values from an external source.
+    ///
+    /// This samples some value from the mutable real world and stores it discretely,
+    /// so it's assumed to be always changing.
     pub fn from_fn<F>(f: F) -> Self
         where F: Fn() -> T + 'static
     {
-        Signal(Dynamic(Rc::new(f)))
+        Signal(Dynamic(Rc::new(f), Default::default()))
+    }
+
+    /// Gets the serial id for this signal.
+    ///
+    /// The `SerialId` is a value that increases every time the signal value has changed.
+    /// This way the observer can detect changes and avoid needless re-computation.
+    pub fn get_serial(&self) -> SerialId
+    {
+        match self.0 {
+            Constant(_) => SerialId::once(),
+            Dynamic(_, ref ser) => ser.get(),
+            Shared(_, ref st) => st.get_serial(),
+            Nested(ref f) => f().get_serial(),
+        }
     }
 
     /// Sample by reference.
@@ -56,8 +77,8 @@ impl<T> Signal<T>
         match self.0
         {
             Constant(ref val) => cb(MaybeOwned::Borrowed(val)),
-            Dynamic(ref f) => cb(MaybeOwned::Owned(f())),
-            Shared(ref f) => f().borrow(|val| cb(MaybeOwned::Borrowed(val))),
+            Dynamic(ref f, ref ser) => { SerialId::inc_cell(ser); cb(MaybeOwned::Owned(f())) },
+            Shared(ref f, ref st) => { f(); st.borrow(|val| cb(MaybeOwned::Borrowed(val))) },
             Nested(ref f) => f().sample_with(cb),
         }
     }
@@ -73,8 +94,8 @@ impl<T: Clone> Signal<T>
         match self.0
         {
             Constant(ref val) => (**val).clone(),
-            Dynamic(ref f) => f(),
-            Shared(ref f) => f().get(),
+            Dynamic(ref f, ref ser) => { SerialId::inc_cell(ser); f() },
+            Shared(ref f, ref st) => { f(); st.get() },
             Nested(ref f) => f().sample(),
         }
     }
@@ -83,12 +104,37 @@ impl<T: Clone> Signal<T>
 impl<T: 'static> Signal<T>
 {
     /// Maps a signal with the provided function.
+    ///
+    /// The closure is called only when the parent signal changes.
     pub fn map<F, R>(&self, f: F) -> Signal<R>
         where F: Fn(MaybeOwned<T>) -> R + 'static,
         R: 'static
     {
-        let this = self.clone();
-        Signal::from_fn(move || this.sample_with(&f))
+        match self.0 {
+            // constant signal: apply f once to produce another constant signal
+            Constant(ref val) => {
+                Signal::constant(f(MaybeOwned::Borrowed(val)))
+            }
+            // shared signal: apply f only when the parent signal has changed
+            Shared(_, _) => {
+                let this = self.clone();
+                let storage = Rc::new(Storage::empty());
+                let st_cloned = storage.clone();
+                Signal(Shared(Rc::new(move || {
+                    let parent_ser = this.get_serial();
+                    if parent_ser > storage.get_serial()
+                    {
+                        // inherit the SerialId from the parent signal so we can compare it later
+                        storage.set_with_serial(this.sample_with(&f), parent_ser)
+                    }
+                }), st_cloned))
+            }
+            // dynamic/nested signal: apply f unconditionally
+            Dynamic(_, _) | Nested(_) => {
+                let this = self.clone();
+                Signal::from_fn(move || this.sample_with(&f))
+            }
+        }
     }
 
     /// Samples the value of this signal every time the trigger stream fires.
@@ -105,8 +151,7 @@ impl<T: 'static> Signal<T>
     {
         Signal(Shared(Rc::new(move || {
             let _keepalive = &keepalive;
-            storage.clone()
-        })))
+        }), storage))
     }
 
     /// Stores the last value sent to a channel.
@@ -116,11 +161,11 @@ impl<T: 'static> Signal<T>
     pub fn from_channel(initial: T, rx: mpsc::Receiver<T>) -> Self
     {
         let storage = Rc::new(Storage::new(initial));
+        let st_cloned = storage.clone();
         Signal(Shared(Rc::new(move || {
             let last = rx.try_iter().last();
             if let Some(val) = last { storage.set(val); }
-            storage.clone()
-        })))
+        }), st_cloned))
     }
 
     /// Creates a signal that folds the values from a channel.
@@ -133,12 +178,12 @@ impl<T: 'static> Signal<T>
         V: 'static
     {
         let storage = Rc::new(Storage::new(initial));
+        let st_cloned = storage.clone();
         Signal(Shared(Rc::new(move || {
             let acc = storage.take();
             let current = rx.try_iter().fold(acc, &f);
             storage.set(current);
-            storage.clone()
-        })))
+        }), st_cloned))
     }
 }
 
@@ -180,15 +225,6 @@ impl<T> From<Rc<T>> for Signal<T>
     }
 }
 
-impl<T> From<Rc<Fn() -> T>> for Signal<T>
-{
-    #[inline]
-    fn from(f: Rc<Fn() -> T>) -> Self
-    {
-        Signal(Dynamic(f))
-    }
-}
-
 // the derive impl adds a `T: Clone` we don't want
 impl<T> Clone for Signal<T>
 {
@@ -197,8 +233,8 @@ impl<T> Clone for Signal<T>
         match self.0
         {
             Constant(ref val) => Signal(Constant(val.clone())),
-            Dynamic(ref rf) => Signal(Dynamic(rf.clone())),
-            Shared(ref rf) => Signal(Shared(rf.clone())),
+            Dynamic(ref rf, ref ser) => Signal(Dynamic(rf.clone(), ser.clone())),
+            Shared(ref rf, ref st) => Signal(Shared(rf.clone(), st.clone())),
             Nested(ref rf) => Signal(Nested(rf.clone())),
         }
     }
@@ -211,8 +247,8 @@ impl<T: fmt::Debug> fmt::Debug for SigValue<T>
         match *self
         {
             Constant(ref val) => write!(f, "Constant({:?})", val),
-            Dynamic(ref rf) => write!(f, "Dynamic(Fn@{:p})", rf),
-            Shared(ref rf) => write!(f, "Shared(Fn@{:p})", rf),
+            Dynamic(ref rf, ref ser) => write!(f, "Dynamic(Fn@{:p}, {:?})", rf, ser),
+            Shared(ref rf, ref st) => write!(f, "Shared(Fn@{:p}, {:?})", rf, st),
             Nested(ref rf) => write!(f, "Nested(Fn@{:p})", rf),
         }
     }
@@ -239,9 +275,31 @@ mod tests
     fn signal_basic()
     {
         let signal = Signal::constant(42);
+        let double = signal.map(|a| *a * 2);
+        let plusone = double.map(|a| *a + 1);
         assert_eq!(signal.sample(), 42);
+        assert_eq!(double.sample(), 84);
+        assert_eq!(plusone.sample(), 85);
         signal.sample_with(|val| assert_eq!(*val, 42));
+    }
 
+    #[test]
+    fn signal_shared()
+    {
+        let st = Rc::new(Storage::new(1));
+        let signal = Signal::from_storage(st.clone(), ());
+        let double = signal.map(|a| *a * 2);
+
+        assert_eq!(signal.sample(), 1);
+        assert_eq!(double.sample(), 2);
+        st.set(42);
+        assert_eq!(signal.sample(), 42);
+        assert_eq!(double.sample(), 84);
+    }
+
+    #[test]
+    fn signal_dynamic()
+    {
         let t = Instant::now();
         let signal = Signal::from_fn(move || t);
         assert_eq!(signal.sample(), t);
@@ -251,10 +309,13 @@ mod tests
         let cloned = n.clone();
         let signal = Signal::from_fn(move || cloned.get());
         let double = signal.map(|a| *a * 2);
+        let plusone = double.map(|a| *a + 1);
         assert_eq!(signal.sample(), 1);
         assert_eq!(double.sample(), 2);
+        assert_eq!(plusone.sample(), 3);
         n.set(13);
         assert_eq!(signal.sample(), 13);
         assert_eq!(double.sample(), 26);
+        assert_eq!(plusone.sample(), 27);
     }
 }
