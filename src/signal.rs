@@ -230,13 +230,13 @@ impl<T> Clone for Signal<T>
 {
     fn clone(&self) -> Self
     {
-        match self.0
+        Signal(match self.0
         {
-            Constant(ref val) => Signal(Constant(val.clone())),
-            Dynamic(ref rf, ref ser) => Signal(Dynamic(rf.clone(), ser.clone())),
-            Shared(ref rf, ref st) => Signal(Shared(rf.clone(), st.clone())),
-            Nested(ref rf) => Signal(Nested(rf.clone())),
-        }
+            Constant(ref val) => Constant(val.clone()),
+            Dynamic(ref rf, ref ser) => Dynamic(rf.clone(), ser.clone()),
+            Shared(ref rf, ref st) => Shared(rf.clone(), st.clone()),
+            Nested(ref rf) => Nested(rf.clone()),
+        })
     }
 }
 
