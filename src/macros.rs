@@ -12,6 +12,11 @@ macro_rules! signal_lift
         $crate::Signal::from_fn(f)
     };
 
+    ($f:expr, $sig:expr) => ({
+        let f = $f;
+        $crate::Signal::map(&$sig, move |a| f(a.into_owned()))
+    });
+
     ($f:expr, $($sig:expr),+) => ({
         let f = $f;
         let sig = [$($sig),+];
