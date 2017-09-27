@@ -45,15 +45,15 @@ impl<T> Signal<T>
 
     /// Creates a signal that samples it's values from an external source.
     ///
-    /// This samples some value from the mutable real world and stores it discretely,
-    /// so it's assumed to be always changing.
+    /// The closure is meant to sample a continuous value from the real world,
+    /// so the signal value is assumed to be always changing.
     pub fn from_fn<F>(f: F) -> Self
         where F: Fn() -> T + 'static
     {
         Signal(Dynamic(Rc::new(f), Default::default()))
     }
 
-    /// Gets the serial id for this signal.
+    /// Gets the current serial id for this signal.
     ///
     /// The `SerialId` is a value that increases every time the signal value has changed.
     /// This way the observer can detect changes and avoid needless re-computation.
