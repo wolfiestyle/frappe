@@ -278,7 +278,8 @@ pub struct SerialId(u64);
 impl SerialId
 {
     /// The serial id of a constant value.
-    pub(crate) fn once() -> Self
+    #[inline]
+    pub fn once() -> Self
     {
         SerialId(1)
     }
