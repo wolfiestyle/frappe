@@ -251,7 +251,7 @@ impl<T> Storage<T>
     pub fn set(&self, val: T)
     {
         *self.val.borrow_mut() = Some(val);
-        SerialId::inc_cell(&self.root_ser);
+        self.root_ser.set(self.root_ser.get().inc())
     }
 
     /// Sets value and increments the local serial.
@@ -273,11 +273,6 @@ impl<T> Storage<T>
         f(self.val.borrow().as_ref().expect(ERR_EMPTY))
     }
 
-    pub fn get_serial(&self) -> SerialId
-    {
-        self.serial.get()
-    }
-
     pub fn must_update(&self) -> bool
     {
         self.root_ser.get() > self.serial.get()
@@ -285,34 +280,19 @@ impl<T> Storage<T>
 }
 
 /// A counter on how many times a signal value has been modified.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-pub struct SerialId(u64);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub(crate) struct SerialId(u64);
 
 impl SerialId
 {
     /// The serial id of a constant value.
-    #[inline]
-    pub fn once() -> Self
+    fn once() -> Self
     {
         SerialId(1)
     }
 
-    pub(crate) fn inc(self) -> Self
+    fn inc(self) -> Self
     {
         SerialId(self.0 + 1)
-    }
-
-    pub(crate) fn inc_cell(cell: &Cell<Self>) -> SerialId
-    {
-        let ser = cell.get().inc();
-        cell.set(ser);
-        ser
-    }
-
-    /// Gets the count stored on this object.
-    #[inline]
-    pub fn get(&self) -> u64
-    {
-        self.0
     }
 }

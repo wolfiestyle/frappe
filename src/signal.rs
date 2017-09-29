@@ -1,8 +1,7 @@
 use std::rc::Rc;
-use std::cell::Cell;
 use std::sync::mpsc;
 use std::fmt;
-use types::{MaybeOwned, Storage, SerialId};
+use types::{MaybeOwned, Storage};
 use stream::Stream;
 
 use self::SigValue::*;
@@ -21,7 +20,7 @@ enum SigValue<T>
     /// A signal that generates it's values from a function.
     ///
     /// This is produced by `Signal::from_fn`
-    Dynamic(Rc<Fn() -> T>, Cell<SerialId>),
+    Dynamic(Rc<Fn() -> T>),
     /// A signal that contains shared data.
     ///
     /// This is produced by stream methods that create a signal.
@@ -50,20 +49,16 @@ impl<T> Signal<T>
     pub fn from_fn<F>(f: F) -> Self
         where F: Fn() -> T + 'static
     {
-        Signal(Dynamic(Rc::new(f), Default::default()))
+        Signal(Dynamic(Rc::new(f)))
     }
 
-    /// Gets the current serial id for this signal.
-    ///
-    /// The `SerialId` is a value that increases every time the signal value has changed.
-    /// This way the observer can detect changes and avoid needless re-computation.
-    pub fn get_serial(&self) -> SerialId
+    /// Checks if the signal has changed since the last time it was sampled.
+    pub fn has_changed(&self) -> bool
     {
         match self.0 {
-            Constant(_) => SerialId::once(),
-            Dynamic(_, ref ser) => ser.get(),
-            Shared(_, ref st) => st.get_serial(),
-            Nested(ref f) => f().get_serial(),
+            Constant(_) => false,
+            Dynamic(_) | Nested(_) => true,
+            Shared(_, ref st) => st.must_update(),
         }
     }
 
@@ -77,7 +72,7 @@ impl<T> Signal<T>
         match self.0
         {
             Constant(ref val) => cb(MaybeOwned::Borrowed(val)),
-            Dynamic(ref f, ref ser) => { SerialId::inc_cell(ser); cb(MaybeOwned::Owned(f())) },
+            Dynamic(ref f) => cb(MaybeOwned::Owned(f())),
             Shared(ref f, ref st) => { f(); st.borrow(|val| cb(MaybeOwned::Borrowed(val))) },
             Nested(ref f) => f().sample_with(cb),
         }
@@ -94,7 +89,7 @@ impl<T: Clone> Signal<T>
         match self.0
         {
             Constant(ref val) => (**val).clone(),
-            Dynamic(ref f, ref ser) => { SerialId::inc_cell(ser); f() },
+            Dynamic(ref f) => f(),
             Shared(ref f, ref st) => { f(); st.get() },
             Nested(ref f) => f().sample(),
         }
@@ -131,7 +126,7 @@ impl<T: 'static> Signal<T>
                 }), st_cloned))
             }
             // dynamic/nested signal: apply f unconditionally
-            Dynamic(_, _) | Nested(_) => {
+            Dynamic(_) | Nested(_) => {
                 let this = self.clone();
                 Signal::from_fn(move || this.sample_with(&f))
             }
@@ -234,7 +229,7 @@ impl<T> Clone for Signal<T>
         Signal(match self.0
         {
             Constant(ref val) => Constant(val.clone()),
-            Dynamic(ref rf, ref ser) => Dynamic(rf.clone(), ser.clone()),
+            Dynamic(ref rf) => Dynamic(rf.clone()),
             Shared(ref rf, ref st) => Shared(rf.clone(), st.clone()),
             Nested(ref rf) => Nested(rf.clone()),
         })
@@ -248,7 +243,7 @@ impl<T: fmt::Debug> fmt::Debug for SigValue<T>
         match *self
         {
             Constant(ref val) => write!(f, "Constant({:?})", val),
-            Dynamic(ref rf, ref ser) => write!(f, "Dynamic(Fn@{:p}, {:?})", rf, ser),
+            Dynamic(ref rf) => write!(f, "Dynamic(Fn@{:p})", rf),
             Shared(ref rf, ref st) => write!(f, "Shared(Fn@{:p}, {:?})", rf, st),
             Nested(ref rf) => write!(f, "Nested(Fn@{:p})", rf),
         }

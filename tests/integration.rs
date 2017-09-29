@@ -268,13 +268,17 @@ fn signal_chain()
     let sig_d = sig_c.map(|a| format!("({})", a));
     let sig_e = sig_d.map(|s| s.into_owned() + ".-");
 
+    assert_eq!(sig_e.has_changed(), true);
     assert_eq!(sig_e.sample(), "(2).-");
+    assert_eq!(sig_e.has_changed(), false);
     assert_eq!(sig_e.sample(), "(2).-");
     assert_eq!(eval_count.get(), 1);
 
     sink.send(42);
 
+    assert_eq!(sig_e.has_changed(), true);
     assert_eq!(sig_e.sample(), "(86).-");
+    assert_eq!(sig_e.has_changed(), false);
     assert_eq!(sig_e.sample(), "(86).-");
     assert_eq!(eval_count.get(), 2);
 }
