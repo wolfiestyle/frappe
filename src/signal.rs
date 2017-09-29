@@ -116,16 +116,17 @@ impl<T: 'static> Signal<T>
                 Signal::constant(f(MaybeOwned::Borrowed(val)))
             }
             // shared signal: apply f only when the parent signal has changed
-            Shared(_, _) => {
-                let this = self.clone();
-                let storage = Rc::new(Storage::empty());
+            Shared(ref upd_, ref st) => {
+                let updater = upd_.clone();
+                let parent_st = st.clone();
+                let storage = Rc::new(Storage::empty(st.root_ser.clone()));
                 let st_cloned = storage.clone();
                 Signal(Shared(Rc::new(move || {
-                    let parent_ser = this.get_serial();
-                    if parent_ser > storage.get_serial()
+                    if storage.must_update()
                     {
-                        // inherit the SerialId from the parent signal so we can compare it later
-                        storage.set_with_serial(this.sample_with(&f), parent_ser)
+                        // sample and map the parent signal
+                        updater();
+                        storage.set_local(parent_st.borrow(|val| f(MaybeOwned::Borrowed(val))))
                     }
                 }), st_cloned))
             }

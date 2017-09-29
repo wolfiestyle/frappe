@@ -252,3 +252,29 @@ fn stream_collect()
 
     assert_eq!(s_string.sample(), "abZc");
 }
+
+#[test]
+fn signal_chain()
+{
+    use std::cell::Cell;
+
+    let sink = Sink::new();
+    let eval_count = Rc::new(Cell::new(0));
+    let ev = eval_count.clone();
+
+    let sig_a = sink.stream().hold(0);
+    let sig_b = sig_a.map(move |a| { ev.set(ev.get() + 1); *a + 1 });
+    let sig_c = sig_b.map(|a| *a * 2);
+    let sig_d = sig_c.map(|a| format!("({})", a));
+    let sig_e = sig_d.map(|s| s.into_owned() + ".-");
+
+    assert_eq!(sig_e.sample(), "(2).-");
+    assert_eq!(sig_e.sample(), "(2).-");
+    assert_eq!(eval_count.get(), 1);
+
+    sink.send(42);
+
+    assert_eq!(sig_e.sample(), "(86).-");
+    assert_eq!(sig_e.sample(), "(86).-");
+    assert_eq!(eval_count.get(), 2);
+}

@@ -1,5 +1,6 @@
 //! Miscellaneous types used by the library.
 
+use std::rc::Rc;
 use std::cell::{Cell, RefCell};
 use std::fmt;
 
@@ -212,25 +213,30 @@ pub(crate) struct Storage<T>
 {
     val: RefCell<Option<T>>,
     serial: Cell<SerialId>,
+    pub root_ser: Rc<Cell<SerialId>>,
 }
 
 const ERR_EMPTY: &'static str = "storage empty";
 
 impl<T> Storage<T>
 {
+    /// Creates a storage with a new root serial.
     pub fn new(val: T) -> Self
     {
         Storage{
             val: RefCell::new(Some(val)),
             serial: Cell::new(SerialId::once()),
+            root_ser: Rc::new(Cell::new(SerialId::once())),
         }
     }
 
-    pub fn empty() -> Self
+    /// Creates a storage with an inherited root serial.
+    pub fn empty(root_ser: Rc<Cell<SerialId>>) -> Self
     {
         Storage{
             val: RefCell::new(None),
             serial: Default::default(),
+            root_ser,
         }
     }
 
@@ -241,16 +247,18 @@ impl<T> Storage<T>
         self.val.borrow().clone().expect(ERR_EMPTY)
     }
 
+    /// Sets value and increments the root serial.
     pub fn set(&self, val: T)
     {
         *self.val.borrow_mut() = Some(val);
-        SerialId::inc_cell(&self.serial);
+        SerialId::inc_cell(&self.root_ser);
     }
 
-    pub fn set_with_serial(&self, val: T, serial: SerialId)
+    /// Sets value and increments the local serial.
+    pub fn set_local(&self, val: T)
     {
         *self.val.borrow_mut() = Some(val);
-        self.serial.set(serial);
+        self.serial.set(self.root_ser.get());
     }
 
     pub fn take(&self) -> T
@@ -268,6 +276,11 @@ impl<T> Storage<T>
     pub fn get_serial(&self) -> SerialId
     {
         self.serial.get()
+    }
+
+    pub fn must_update(&self) -> bool
+    {
+        self.root_ser.get() > self.serial.get()
     }
 }
 
