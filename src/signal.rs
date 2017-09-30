@@ -16,6 +16,8 @@ pub struct Signal<T>(SigValue<T>);
 enum SigValue<T>
 {
     /// A signal with constant value.
+    ///
+    /// We store the value in a Rc to provide Clone support without a `T: Clone` bound.
     Constant(Rc<T>),
     /// A signal that generates it's values from a function.
     ///
@@ -24,6 +26,7 @@ enum SigValue<T>
     /// A signal that contains shared data.
     ///
     /// This is produced by stream methods that create a signal.
+    /// It contains an updater function and a value storage.
     Shared(Rc<Fn()>, Rc<Storage<T>>),
     /// A signal that contains a signal, and allows sampling the inner signal directly.
     ///
@@ -114,6 +117,7 @@ impl<T: 'static> Signal<T>
             Shared(ref upd_, ref st) => {
                 let updater = upd_.clone();
                 let parent_st = st.clone();
+                // the storage inherits the root serial so we can track changes at the source
                 let storage = Rc::new(Storage::empty(st.root_ser.clone()));
                 let st_cloned = storage.clone();
                 Signal(Shared(Rc::new(move || {
@@ -146,6 +150,7 @@ impl<T: 'static> Signal<T>
     pub(crate) fn from_storage<A: 'static>(storage: Rc<Storage<T>>, keepalive: A) -> Self
     {
         Signal(Shared(Rc::new(move || {
+            // the closure owns and does type erasure on the value
             let _keepalive = &keepalive;
         }), storage))
     }
@@ -221,6 +226,7 @@ impl<T: Default> Default for Signal<T>
 
 impl<T> From<T> for Signal<T>
 {
+    /// Creates a constant signal from T.
     #[inline]
     fn from(val: T) -> Self
     {
@@ -230,6 +236,7 @@ impl<T> From<T> for Signal<T>
 
 impl<T> From<Rc<T>> for Signal<T>
 {
+    /// Creates a constant signal from T (avoids re-wrapping the Rc).
     #[inline]
     fn from(val: Rc<T>) -> Self
     {
@@ -240,6 +247,7 @@ impl<T> From<Rc<T>> for Signal<T>
 // the derive impl adds a `T: Clone` we don't want
 impl<T> Clone for Signal<T>
 {
+    /// Creates a copy of this signal that references the same value.
     fn clone(&self) -> Self
     {
         Signal(match self.0
@@ -268,6 +276,7 @@ impl<T: fmt::Debug> fmt::Debug for SigValue<T>
 
 impl<T: fmt::Display> fmt::Display for Signal<T>
 {
+    /// Samples the signal and formats the value.
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result
     {
         self.sample_with(|val| fmt::Display::fmt(&*val, f))

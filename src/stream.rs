@@ -80,6 +80,7 @@ impl<T> Default for Sink<T>
 
 impl<T> Clone for Sink<T>
 {
+    /// Creates a copy of this sink that references the same event source.
     fn clone(&self) -> Self
     {
         Sink{ cbs: self.cbs.clone() }
@@ -389,6 +390,7 @@ impl<T: 'static> Stream<Stream<T>>
 
 impl<T> Clone for Stream<T>
 {
+    /// Creates a copy of this stream that references the same event chain.
     fn clone(&self) -> Self
     {
         Stream{ cbs: self.cbs.clone(), source: self.source.clone() }
