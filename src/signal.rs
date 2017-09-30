@@ -181,9 +181,12 @@ impl<T: 'static> Signal<T>
         let storage = Rc::new(Storage::new(initial));
         let st_cloned = storage.clone();
         Signal(Shared(Rc::new(move || {
-            let acc = storage.take();
-            let current = rx.try_iter().fold(acc, &f);
-            storage.set(current);
+            if let Ok(first) = rx.try_recv()
+            {
+                let acc = f(storage.take(), first);
+                let current = rx.try_iter().fold(acc, &f);
+                storage.set(current);
+            }
         }), st_cloned))
     }
 }
