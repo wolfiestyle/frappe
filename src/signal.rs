@@ -188,8 +188,24 @@ impl<T: 'static> Signal<Signal<T>>
     /// Creates a new signal that samples the inner value of a nested signal.
     pub fn switch(&self) -> Signal<T>
     {
-        let this = self.clone();
-        Signal(Nested(Rc::new(move || this.sample())))
+        match self.0
+        {
+            // constant signal: just extract the inner signal
+            Constant(ref sig) => (**sig).clone(),
+            // dynamic signal: re-label as nested
+            Dynamic(ref f) => Signal(Nested(f.clone())),
+            // shared signal: sample to extract the inner signal
+            Shared(ref upd, ref st) => {
+                let updater = upd.clone();
+                let storage = st.clone();
+                Signal(Nested(Rc::new(move || { updater(); storage.get() })))
+            }
+            // nested signal: remove one layer
+            Nested(ref f_) => {
+                let f = f_.clone();
+                Signal(Nested(Rc::new(move || f().sample())))
+            }
+        }
     }
 }
 

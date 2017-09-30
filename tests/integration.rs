@@ -98,9 +98,9 @@ fn signal_switch()
     assert_eq!(switched.sample(), 1);
     assert_eq!(double.sample(), 2);
 
-    signal_sink.send(Signal::from_fn(|| 2));
-    assert_eq!(switched.sample(), 2);
-    assert_eq!(double.sample(), 4);
+    signal_sink.send(Signal::from_fn(|| 12));
+    assert_eq!(switched.sample(), 12);
+    assert_eq!(double.sample(), 24);
 }
 
 #[test]
