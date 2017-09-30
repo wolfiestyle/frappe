@@ -55,6 +55,13 @@ impl<T> Signal<T>
         Signal(Dynamic(Rc::new(f)))
     }
 
+    /// Creates a new shared signal.
+    fn shared<F>(storage: Rc<Storage<T>>, updater: F) -> Self
+        where F: Fn() + 'static
+    {
+        Signal(Shared(Rc::new(updater), storage))
+    }
+
     /// Checks if the signal has changed since the last time it was sampled.
     pub fn has_changed(&self) -> bool
     {
@@ -119,15 +126,14 @@ impl<T: 'static> Signal<T>
                 let parent_st = st.clone();
                 // the storage inherits the root serial so we can track changes at the source
                 let storage = Rc::new(Storage::empty(st.root_ser.clone()));
-                let st_cloned = storage.clone();
-                Signal(Shared(Rc::new(move || {
+                Signal::shared(storage.clone(), move || {
                     if storage.must_update()
                     {
                         // sample and map the parent signal
                         updater();
                         storage.set_local(parent_st.borrow(&f))
                     }
-                }), st_cloned))
+                })
             }
             // dynamic/nested signal: apply f unconditionally
             Dynamic(_) | Nested(_) => {
@@ -149,10 +155,10 @@ impl<T: 'static> Signal<T>
     /// Creates a signal from a shared value.
     pub(crate) fn from_storage<A: 'static>(storage: Rc<Storage<T>>, keepalive: A) -> Self
     {
-        Signal(Shared(Rc::new(move || {
+        Signal::shared(storage, move || {
             // the closure owns and does type erasure on the value
             let _keepalive = &keepalive;
-        }), storage))
+        })
     }
 
     /// Stores the last value sent to a channel.
@@ -162,11 +168,10 @@ impl<T: 'static> Signal<T>
     pub fn from_channel(initial: T, rx: mpsc::Receiver<T>) -> Self
     {
         let storage = Rc::new(Storage::new(initial));
-        let st_cloned = storage.clone();
-        Signal(Shared(Rc::new(move || {
+        Signal::shared(storage.clone(), move || {
             let last = rx.try_iter().last();
             if let Some(val) = last { storage.set(val); }
-        }), st_cloned))
+        })
     }
 
     /// Creates a signal that folds the values from a channel.
@@ -179,15 +184,14 @@ impl<T: 'static> Signal<T>
         V: 'static
     {
         let storage = Rc::new(Storage::new(initial));
-        let st_cloned = storage.clone();
-        Signal(Shared(Rc::new(move || {
+        Signal::shared(storage.clone(), move || {
             if let Ok(first) = rx.try_recv()
             {
                 let acc = f(storage.take(), first);
                 let current = rx.try_iter().fold(acc, &f);
                 storage.set(current);
             }
-        }), st_cloned))
+        })
     }
 }
 
