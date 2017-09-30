@@ -76,7 +76,7 @@ impl<T> Signal<T>
         {
             Constant(ref val) => cb(MaybeOwned::Borrowed(val)),
             Dynamic(ref f) => cb(MaybeOwned::Owned(f())),
-            Shared(ref f, ref st) => { f(); st.borrow(|val| cb(MaybeOwned::Borrowed(val))) },
+            Shared(ref f, ref st) => { f(); st.borrow(cb) },
             Nested(ref f) => f().sample_with(cb),
         }
     }
@@ -125,7 +125,7 @@ impl<T: 'static> Signal<T>
                     {
                         // sample and map the parent signal
                         updater();
-                        storage.set_local(parent_st.borrow(|val| f(MaybeOwned::Borrowed(val))))
+                        storage.set_local(parent_st.borrow(&f))
                     }
                 }), st_cloned))
             }
