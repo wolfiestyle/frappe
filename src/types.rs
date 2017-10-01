@@ -267,10 +267,10 @@ impl<T> Storage<T>
     }
 
     /// Gets the value by borrowing it to a closure.
-    pub fn borrow<R, F>(&self, f: F) -> R
+    pub fn borrow_with<R, F>(&self, f: F) -> R
         where F: FnOnce(MaybeOwned<T>) -> R
     {
-        f(MaybeOwned::Borrowed(self.val.borrow().as_ref().expect(ERR_EMPTY)))
+        f(self.val.borrow().as_ref().expect(ERR_EMPTY).into())
     }
 
     pub fn must_update(&self) -> bool
