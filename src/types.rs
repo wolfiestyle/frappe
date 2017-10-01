@@ -225,8 +225,8 @@ impl<T> Storage<T>
     {
         Storage{
             val: RefCell::new(Some(val)),
-            serial: Cell::new(SerialId::once()),
-            root_ser: Rc::new(Cell::new(SerialId::once())),
+            serial: Cell::new(SERIAL_ONE),
+            root_ser: Rc::new(Cell::new(SERIAL_ONE)),
         }
     }
 
@@ -283,14 +283,11 @@ impl<T> Storage<T>
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub(crate) struct SerialId(u64);
 
+/// The serial id of a constant value.
+const SERIAL_ONE: SerialId = SerialId(1);
+
 impl SerialId
 {
-    /// The serial id of a constant value.
-    fn once() -> Self
-    {
-        SerialId(1)
-    }
-
     fn inc(self) -> Self
     {
         SerialId(self.0 + 1)
