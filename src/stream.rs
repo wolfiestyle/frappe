@@ -100,6 +100,11 @@ pub struct Stream<T>
 
 impl<T> Stream<T>
 {
+    fn new<S: 'static>(cbs: Rc<Callbacks<T>>, source: S) -> Self
+    {
+        Stream{ cbs, source: Some(Rc::new(source)) }
+    }
+
     /// Creates a stream that never fires.
     pub fn never() -> Self
     {
@@ -126,7 +131,7 @@ impl<T: 'static> Stream<T>
         self.cbs.push(move |arg| {
             with_weak(&weak, |cb| if pred(&arg) { cb.call_dyn(arg) })
         });
-        Stream{ cbs: new_cbs, source: Some(Rc::new(self.clone())) }
+        Stream::new(new_cbs, self.clone())
     }
 
     /// Filter and map a stream simultaneously.
@@ -138,7 +143,7 @@ impl<T: 'static> Stream<T>
         self.cbs.push(move |arg| {
             with_weak(&weak, |cb| if let Some(val) = f(arg) { cb.call(val) })
         });
-        Stream{ cbs: new_cbs, source: Some(Rc::new(self.clone())) }
+        Stream::new(new_cbs, self.clone())
     }
 
     /// Creates a new stream that fires with the events from both streams.
@@ -152,7 +157,7 @@ impl<T: 'static> Stream<T>
         other.cbs.push(move |arg| {
             with_weak(&weak2, |cb| cb.call_dyn(arg))
         });
-        Stream{ cbs: new_cbs, source: Some(Rc::new((self.clone(), other.clone()))) }
+        Stream::new(new_cbs, (self.clone(), other.clone()))
     }
 
     /// Merges two streams of different types using the provided function.
@@ -171,7 +176,7 @@ impl<T: 'static> Stream<T>
         other.cbs.push(move |arg| {
             with_weak(&weak2, |cb| cb.call(f2(Either::Right(arg))))
         });
-        Stream{ cbs: new_cbs, source: Some(Rc::new((self.clone(), other.clone()))) }
+        Stream::new(new_cbs, (self.clone(), other.clone()))
     }
 
     /// Accumulates the values sent over this stream.
@@ -237,7 +242,7 @@ impl<T: 'static> Stream<T>
         self.cbs.push(move |arg| {
             with_weak(&weak, |cb| f(arg, Sink{ cbs: cb }))
         });
-        Stream{ cbs: new_cbs, source: Some(Rc::new(self.clone())) }
+        Stream::new(new_cbs, self.clone())
     }
 
     /// Reads the values without modifying them.
@@ -384,7 +389,7 @@ impl<T: 'static> Stream<Stream<T>>
             });
             true
         });
-        Stream{ cbs: new_cbs, source: Some(Rc::new(self.clone())) }
+        Stream::new(new_cbs, self.clone())
     }
 }
 
