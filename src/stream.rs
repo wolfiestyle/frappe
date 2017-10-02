@@ -28,7 +28,7 @@ impl<T> Sink<T>
     /// Creates a stream that receives the events sent to this sink.
     pub fn stream(&self) -> Stream<T>
     {
-        Stream{ cbs: self.cbs.clone(), source: None }
+        Stream::new(self.cbs.clone(), ())
     }
 
     /// Sends a value into the sink.
@@ -95,20 +95,20 @@ impl<T> Clone for Sink<T>
 pub struct Stream<T>
 {
     cbs: Rc<Callbacks<T>>,
-    source: Option<Rc<Any>>,  // strong reference to a parent Stream
+    source: Rc<Any>,  // strong reference to a parent Stream
 }
 
 impl<T> Stream<T>
 {
     fn new<S: 'static>(cbs: Rc<Callbacks<T>>, source: S) -> Self
     {
-        Stream{ cbs, source: Some(Rc::new(source)) }
+        Stream{ cbs, source: Rc::new(source) }
     }
 
     /// Creates a stream that never fires.
     pub fn never() -> Self
     {
-        Stream{ cbs: Default::default(), source: None }
+        Stream::new(Default::default(), ())
     }
 }
 
@@ -362,8 +362,8 @@ impl<T: SumType2 + Clone + 'static> Stream<T>
             }
         });
         let source_rc = Rc::new(self.clone());
-        let stream_1 = Stream{ cbs: cbs_1, source: Some(source_rc.clone()) };
-        let stream_2 = Stream{ cbs: cbs_2, source: Some(source_rc) };
+        let stream_1 = Stream{ cbs: cbs_1, source: source_rc.clone() };
+        let stream_2 = Stream{ cbs: cbs_2, source: source_rc };
         (stream_1, stream_2)
     }
 }
