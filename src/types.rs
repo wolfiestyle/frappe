@@ -1,7 +1,7 @@
 //! Miscellaneous types used by the library.
 
 use std::rc::Rc;
-use std::cell::{Cell, RefCell};
+use std::cell::{Cell, RefCell, Ref};
 use std::fmt;
 
 pub use maybe_owned::MaybeOwned;
@@ -266,16 +266,20 @@ impl<T> Storage<T>
         self.val.borrow_mut().take().expect(ERR_EMPTY)
     }
 
-    /// Gets the value by borrowing it to a closure.
-    pub fn borrow_with<R, F>(&self, f: F) -> R
-        where F: FnOnce(MaybeOwned<T>) -> R
+    /// Gets the value as a std::cell::Ref
+    pub fn borrow(&self) -> Ref<T>
     {
-        f(self.val.borrow().as_ref().expect(ERR_EMPTY).into())
+        Ref::map(self.val.borrow(), |v| v.as_ref().expect(ERR_EMPTY))
     }
 
     pub fn must_update(&self) -> bool
     {
         self.root_ser.get() > self.serial.get()
+    }
+
+    pub fn inc_local(&self)
+    {
+        self.serial.set(self.root_ser.get());
     }
 }
 
@@ -292,4 +296,12 @@ impl SerialId
     {
         SerialId(self.0 + 1)
     }
+}
+
+/// Defines a signal that contains shared storage.
+pub(crate) trait SharedSignal<T>
+{
+    fn has_changed(&self) -> bool;
+    fn storage(&self) -> &Storage<T>;
+    fn sample(&self) -> Ref<T>;
 }
