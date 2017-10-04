@@ -122,7 +122,7 @@ impl<T: 'static> Signal<T>
             }
             // shared signal: apply f only when the parent signal has changed
             Shared(ref sig) => Signal::shared(SharedMap{
-                storage: Storage::empty(sig.storage().root_ser.clone()),
+                storage: Storage::inherit(sig.storage()),
                 parent: sig.clone(),
                 map_f: f,
             }),

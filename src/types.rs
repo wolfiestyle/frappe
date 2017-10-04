@@ -231,12 +231,12 @@ impl<T> Storage<T>
     }
 
     /// Creates a storage with an inherited root serial.
-    pub fn empty(root_ser: Rc<Cell<SerialId>>) -> Self
+    pub fn inherit<P>(parent: &Storage<P>) -> Self
     {
         Storage{
             val: RefCell::new(None),
             serial: Default::default(),
-            root_ser,
+            root_ser: parent.root_ser.clone(),
         }
     }
 
@@ -251,14 +251,14 @@ impl<T> Storage<T>
     pub fn set(&self, val: T)
     {
         *self.val.borrow_mut() = Some(val);
-        self.root_ser.set(self.root_ser.get().inc())
+        self.inc_root();
     }
 
     /// Sets value and increments the local serial.
     pub fn set_local(&self, val: T)
     {
         *self.val.borrow_mut() = Some(val);
-        self.serial.set(self.root_ser.get());
+        self.inc_local();
     }
 
     pub fn take(&self) -> T
@@ -275,6 +275,11 @@ impl<T> Storage<T>
     pub fn must_update(&self) -> bool
     {
         self.root_ser.get() > self.serial.get()
+    }
+
+    pub fn inc_root(&self)
+    {
+        self.root_ser.set(self.root_ser.get().inc());
     }
 
     pub fn inc_local(&self)
