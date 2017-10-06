@@ -1,8 +1,8 @@
 use std::rc::Rc;
 use std::cell::Ref;
 use std::sync::mpsc;
-use std::{fmt, ops};
-use types::{MaybeOwned, Storage, SharedSignal};
+use std::fmt;
+use types::{MaybeOwned, Storage, SharedSignal, SharedImpl};
 use stream::Stream;
 
 use self::SigValue::*;
@@ -121,10 +121,10 @@ impl<T: 'static> Signal<T>
                 Signal::constant(f(MaybeOwned::Borrowed(val)))
             }
             // shared signal: apply f only when the parent signal has changed
-            Shared(ref sig) => Signal::shared(SharedMap{
+            Shared(ref sig) => Signal::shared(SharedImpl{
                 storage: Storage::inherit(sig.storage()),
-                parent: sig.clone(),
-                map_f: f,
+                source: sig.clone(),
+                f,
             }),
             // dynamic/nested signal: apply f unconditionally
             Dynamic(_) | Nested(_) => {
@@ -144,7 +144,7 @@ impl<T: 'static> Signal<T>
     }
 
     /// Creates a signal from a shared value.
-    pub(crate) fn from_storage<P: 'static>(storage: Rc<SharedStore<T, P>>) -> Self
+    pub(crate) fn from_storage<P: 'static>(storage: Rc<SharedImpl<T, P, ()>>) -> Self
     {
         Signal(Shared(storage))
     }
@@ -168,10 +168,10 @@ impl<T: 'static> Signal<T>
         where F: Fn(T, V) -> T + 'static,
         V: 'static
     {
-        Signal::shared(SharedChannel{
+        Signal::shared(SharedImpl{
             storage: Storage::new(initial),
             source: rx,
-            fold_f: f,
+            f,
         })
     }
 }
@@ -270,25 +270,21 @@ impl<T: fmt::Display> fmt::Display for Signal<T>
     }
 }
 
-/// A signal that contains only storage.
-pub(crate) struct SharedStore<T, P>
-{
-    storage: Storage<T>,
-    _keepalive: P,
-}
+// A signal that contains only storage.
 
-impl<T, P> SharedStore<T, P>
+impl<T, S> SharedImpl<T, S, ()>
 {
-    pub fn new(initial: T, parent: P) -> Self
+    pub fn new(initial: T, source: S) -> Self
     {
-        SharedStore{
+        SharedImpl{
             storage: Storage::new(initial),
-            _keepalive: parent,
+            source,
+            f: (),
         }
     }
 }
 
-impl<T, P> SharedSignal<T> for SharedStore<T, P>
+impl<T, S> SharedSignal<T> for SharedImpl<T, S, ()>
 {
     fn update(&self) {}
 
@@ -308,30 +304,14 @@ impl<T, P> SharedSignal<T> for SharedStore<T, P>
     }
 }
 
-impl<T, U> ops::Deref for SharedStore<T, U>
-{
-    type Target = Storage<T>;
+// A signal that maps a parent shared signal.
 
-    fn deref(&self) -> &Self::Target
-    {
-        &self.storage
-    }
-}
-
-/// A signal that maps a parent shared signal.
-struct SharedMap<T, P, F>
-{
-    storage: Storage<T>,
-    parent: Rc<SharedSignal<P>>,
-    map_f: F,
-}
-
-impl<T, P, F> SharedSignal<T> for SharedMap<T, P, F>
+impl<T, P, F> SharedSignal<T> for SharedImpl<T, Rc<SharedSignal<P>>, F>
     where F: Fn(MaybeOwned<P>) -> T + 'static
 {
     fn update(&self)
     {
-        self.parent.update();
+        self.source.update();
     }
 
     fn has_changed(&self) -> bool
@@ -349,30 +329,24 @@ impl<T, P, F> SharedSignal<T> for SharedMap<T, P, F>
     {
         if self.has_changed()
         {
-            let res = (self.map_f)(MaybeOwned::Borrowed(&self.parent.sample()));
+            let res = (self.f)(MaybeOwned::Borrowed(&self.source.sample()));
             self.storage.set_local(res);
         }
         self.storage.borrow()
     }
 }
 
-/// A signal that folds a channel.
-struct SharedChannel<T, S, F>
-{
-    storage: Storage<T>,
-    source: mpsc::Receiver<S>,
-    fold_f: F,
-}
+// A signal that folds a channel.
 
-impl<T, S, F> SharedSignal<T> for SharedChannel<T, S, F>
+impl<T, S, F> SharedSignal<T> for SharedImpl<T, mpsc::Receiver<S>, F>
     where F: Fn(T, S) -> T + 'static,
 {
     fn update(&self)
     {
         if let Ok(first) = self.source.try_recv()
         {
-            let acc = (self.fold_f)(self.storage.take(), first);
-            let new = self.source.try_iter().fold(acc, &self.fold_f);
+            let acc = (self.f)(self.storage.take(), first);
+            let new = self.source.try_iter().fold(acc, &self.f);
             self.storage.set(new);
         }
     }
@@ -420,7 +394,7 @@ mod tests
     #[test]
     fn signal_shared()
     {
-        let st = Rc::new(SharedStore::new(1, ()));
+        let st = Rc::new(SharedImpl::new(1, ()));
         let signal = Signal::from_storage(st.clone());
         let double = signal.map(|a| *a * 2);
 

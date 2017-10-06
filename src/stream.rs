@@ -3,9 +3,9 @@ use std::cell::Cell;
 use std::sync::mpsc;
 use std::any::Any;
 use std::iter;
-use types::{Callbacks, SumType2, MaybeOwned};
+use types::{Callbacks, SumType2, MaybeOwned, SharedImpl};
 use helpers::{rc_and_weak, with_weak};
-use signal::{Signal, SharedStore};
+use signal::Signal;
 
 #[cfg(feature="either")]
 use either::Either;
@@ -190,7 +190,7 @@ impl<T: 'static> Stream<T>
         where F: Fn(A, MaybeOwned<T>) -> A + 'static,
         A: 'static
     {
-        let (storage, weak) = rc_and_weak(SharedStore::new(initial, self.clone()));
+        let (storage, weak) = rc_and_weak(SharedImpl::new(initial, self.clone()));
         self.cbs.push(move |arg| {
             weak.upgrade()
                 .map(|st| {
@@ -213,7 +213,7 @@ impl<T: 'static> Stream<T>
         where F: Fn(A, MaybeOwned<T>) -> A + 'static,
         A: Clone + 'static
     {
-        let (storage, weak) = rc_and_weak(SharedStore::new(initial, self.clone()));
+        let (storage, weak) = rc_and_weak(SharedImpl::new(initial, self.clone()));
         self.cbs.push(move |arg| {
             weak.upgrade()
                 .map(|st| {
@@ -269,7 +269,7 @@ impl<T: Clone + 'static> Stream<T>
     pub fn hold_if<F>(&self, initial: T, pred: F) -> Signal<T>
         where F: Fn(&T) -> bool + 'static
     {
-        let (storage, weak) = rc_and_weak(SharedStore::new(initial, self.clone()));
+        let (storage, weak) = rc_and_weak(SharedImpl::new(initial, self.clone()));
         self.cbs.push(move |arg| {
             weak.upgrade()
                 .map(|st| if pred(&arg) { st.set(arg.into_owned()); })

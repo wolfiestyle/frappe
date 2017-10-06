@@ -2,7 +2,7 @@
 
 use std::rc::Rc;
 use std::cell::{Cell, RefCell, Ref};
-use std::fmt;
+use std::{fmt, ops};
 
 pub use maybe_owned::MaybeOwned;
 #[cfg(feature="either")]
@@ -322,4 +322,22 @@ pub(crate) trait SharedSignal<T>
     fn has_changed(&self) -> bool;
     fn storage(&self) -> &Storage<T>;
     fn sample(&self) -> Ref<T>;
+}
+
+/// Common template for shared signal implementations.
+pub(crate) struct SharedImpl<T, S, F>
+{
+    pub storage: Storage<T>,
+    pub source: S,
+    pub f: F,
+}
+
+impl<T, S, F> ops::Deref for SharedImpl<T, S, F>
+{
+    type Target = Storage<T>;
+
+    fn deref(&self) -> &Self::Target
+    {
+        &self.storage
+    }
 }

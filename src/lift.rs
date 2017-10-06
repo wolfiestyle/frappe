@@ -1,7 +1,7 @@
 //! Utilities for lifting functions into signals.
 
 use std::cell::Ref;
-use types::{Storage, SharedSignal};
+use types::{Storage, SharedSignal, SharedImpl};
 use signal::Signal;
 
 /// Maps a function over the value of signals.
@@ -33,23 +33,16 @@ macro_rules! signal_lift
         ($crate::lift::lift6($f, $sig1, $sig2, $sig3, $sig4, $sig5, $sig6));
 }
 
-struct SharedLift<T, S, F>
-{
-    storage: Storage<T>,
-    sig: S,
-    lift_f: F,
-}
-
 macro_rules! lift_impl
 {
     ($fname:ident ( $($vname:ident : $tname:ident),+ ) $($idx:tt)+) => (
-        impl<T, $($tname,)+ F> SharedSignal<T> for SharedLift<T, ($(Signal<$tname>),+), F>
+        impl<T, $($tname,)+ F> SharedSignal<T> for SharedImpl<T, ($(Signal<$tname>),+), F>
             where F: Fn($($tname),+) -> T + 'static,
             $($tname: Clone + 'static),+
         {
             fn update(&self)
             {
-                if !self.storage.must_update() && ($(self.sig.$idx.has_changed())||+)
+                if !self.storage.must_update() && ($(self.source.$idx.has_changed())||+)
                 {
                     self.storage.inc_root();
                 }
@@ -70,7 +63,7 @@ macro_rules! lift_impl
             {
                 if self.has_changed()
                 {
-                    let val = (self.lift_f)($(self.sig.$idx.sample()),+);
+                    let val = (self.f)($(self.source.$idx.sample()),+);
                     self.storage.set_local(val);
                 }
                 self.storage.borrow()
@@ -82,10 +75,10 @@ macro_rules! lift_impl
             where F: Fn($($tname),+) -> T + 'static,
             T: 'static, $($tname: Clone + 'static),+
         {
-            Signal::shared(SharedLift{
+            Signal::shared(SharedImpl{
                 storage: Default::default(),
-                sig: ($($vname),+),
-                lift_f: f,
+                source: ($($vname),+),
+                f: f,
             })
         }
     );
