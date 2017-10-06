@@ -290,6 +290,8 @@ impl<T, P> SharedStore<T, P>
 
 impl<T, P> SharedSignal<T> for SharedStore<T, P>
 {
+    fn update(&self) {}
+
     fn has_changed(&self) -> bool
     {
         self.storage.must_update()
@@ -327,8 +329,14 @@ struct SharedMap<T, P, F>
 impl<T, P, F> SharedSignal<T> for SharedMap<T, P, F>
     where F: Fn(MaybeOwned<P>) -> T + 'static
 {
+    fn update(&self)
+    {
+        self.parent.update();
+    }
+
     fn has_changed(&self) -> bool
     {
+        self.update();
         self.storage.must_update()
     }
 
@@ -339,7 +347,7 @@ impl<T, P, F> SharedSignal<T> for SharedMap<T, P, F>
 
     fn sample(&self) -> Ref<T>
     {
-        if self.storage.must_update()
+        if self.has_changed()
         {
             let res = (self.map_f)(MaybeOwned::Borrowed(&self.parent.sample()));
             self.storage.set_local(res);
@@ -356,25 +364,23 @@ struct SharedChannel<T, S, F>
     fold_f: F,
 }
 
-impl<T, S, F> SharedChannel<T, S, F>
-    where F: Fn(T, S) -> T + 'static,
-{
-    fn update(&self) -> bool
-    {
-        self.source.try_recv().map(|first| {
-            let acc = (self.fold_f)(self.storage.take(), first);
-            let new = self.source.try_iter().fold(acc, &self.fold_f);
-            self.storage.set(new);
-        }).is_ok()
-    }
-}
-
 impl<T, S, F> SharedSignal<T> for SharedChannel<T, S, F>
     where F: Fn(T, S) -> T + 'static,
 {
+    fn update(&self)
+    {
+        if let Ok(first) = self.source.try_recv()
+        {
+            let acc = (self.fold_f)(self.storage.take(), first);
+            let new = self.source.try_iter().fold(acc, &self.fold_f);
+            self.storage.set(new);
+        }
+    }
+
     fn has_changed(&self) -> bool
     {
-        self.storage.must_update() || self.update()
+        self.update();
+        self.storage.must_update()
     }
 
     fn storage(&self) -> &Storage<T>

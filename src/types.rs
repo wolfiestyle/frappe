@@ -306,6 +306,7 @@ impl SerialId
 /// Defines a signal that contains shared storage.
 pub(crate) trait SharedSignal<T>
 {
+    fn update(&self);
     fn has_changed(&self) -> bool;
     fn storage(&self) -> &Storage<T>;
     fn sample(&self) -> Ref<T>;
