@@ -288,6 +288,18 @@ impl<T> Storage<T>
     }
 }
 
+impl<T> Default for Storage<T>
+{
+    fn default() -> Self
+    {
+        Storage{
+            val: RefCell::new(None),
+            serial: Default::default(),
+            root_ser: Rc::new(Cell::new(SERIAL_ONE)),
+        }
+    }
+}
+
 /// A counter on how many times a signal value has been modified.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub(crate) struct SerialId(u64);

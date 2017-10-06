@@ -9,9 +9,7 @@ mod helpers;
 pub mod types;
 mod stream;
 mod signal;
-
-#[macro_use]
-mod macros;
+pub mod lift;
 
 pub use stream::{Sink, Stream};
 pub use signal::Signal;

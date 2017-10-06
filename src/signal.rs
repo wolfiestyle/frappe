@@ -56,7 +56,7 @@ impl<T> Signal<T>
     }
 
     /// Creates a new shared signal.
-    fn shared<S>(storage: S) -> Self
+    pub(crate) fn shared<S>(storage: S) -> Self
         where S: SharedSignal<T> + 'static
     {
         Signal(Shared(Rc::new(storage)))
