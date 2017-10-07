@@ -50,7 +50,6 @@ macro_rules! lift_impl
 
             fn has_changed(&self) -> bool
             {
-                self.update();
                 self.storage.must_update()
             }
 

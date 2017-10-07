@@ -68,7 +68,7 @@ impl<T> Signal<T>
         match self.0 {
             Constant(_) => false,
             Dynamic(_) | Nested(_) => true,
-            Shared(ref s) => s.has_changed(),
+            Shared(ref s) => { s.update(); s.has_changed() },
         }
     }
 
@@ -83,7 +83,7 @@ impl<T> Signal<T>
         {
             Constant(ref val) => cb(MaybeOwned::Borrowed(val)),
             Dynamic(ref f) => cb(MaybeOwned::Owned(f())),
-            Shared(ref s) => cb(MaybeOwned::Borrowed(&s.sample())),
+            Shared(ref s) => { s.update(); cb(MaybeOwned::Borrowed(&s.sample())) },
             Nested(ref f) => f().sample_with(cb),
         }
     }
@@ -100,7 +100,7 @@ impl<T: Clone> Signal<T>
         {
             Constant(ref val) => (**val).clone(),
             Dynamic(ref f) => f(),
-            Shared(ref s) => s.sample().clone(),
+            Shared(ref s) => { s.update(); s.sample().clone() },
             Nested(ref f) => f().sample(),
         }
     }
@@ -190,7 +190,7 @@ impl<T: 'static> Signal<Signal<T>>
             // shared signal: sample to extract the inner signal
             Shared(ref sig_) => {
                 let sig = sig_.clone();
-                Signal(Nested(Rc::new(move || sig.sample().clone())))
+                Signal(Nested(Rc::new(move || { sig.update(); sig.sample().clone() })))
             }
             // nested signal: remove one layer
             Nested(ref f_) => {
@@ -311,12 +311,11 @@ impl<T, P, F> SharedSignal<T> for SharedImpl<T, Rc<SharedSignal<P>>, F>
 {
     fn update(&self)
     {
-        self.source.update();
+        self.source.update()
     }
 
     fn has_changed(&self) -> bool
     {
-        self.update();
         self.storage.must_update()
     }
 
@@ -353,7 +352,6 @@ impl<T, S, F> SharedSignal<T> for SharedImpl<T, mpsc::Receiver<S>, F>
 
     fn has_changed(&self) -> bool
     {
-        self.update();
         self.storage.must_update()
     }
 
