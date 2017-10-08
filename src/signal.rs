@@ -10,7 +10,7 @@ use self::SigValue::*;
 /// Represents a discrete value that changes over time.
 ///
 /// Signals are usually constructed by stream operations and can be read using the `sample` or
-/// `sample_with` methods.
+/// `sample_with` methods. They update lazily when someone reads them.
 #[derive(Debug)]
 pub struct Signal<T>(SigValue<T>);
 

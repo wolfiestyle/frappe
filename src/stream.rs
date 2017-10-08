@@ -32,6 +32,9 @@ impl<T> Sink<T>
     }
 
     /// Sends a value into the sink.
+    ///
+    /// The value will be distributed `N-1` times as reference and then one time by value,
+    /// where `N` is the amount of streams connected to this sink.
     #[inline]
     pub fn send(&self, val: T)
     {
@@ -89,8 +92,8 @@ impl<T> Clone for Sink<T>
 
 /// A stream of discrete events sent over time.
 ///
-/// All the streams returned by the methods below contain an internal reference to it's parent,
-/// so dropping intermediate streams won't break the chain.
+/// All the objects that result from stream operations contain an internal reference to it's parent,
+/// so dropping intermediate temporary streams (like the ones created from chaining methods) won't break the chain.
 #[derive(Debug)]
 pub struct Stream<T>
 {
@@ -292,7 +295,7 @@ impl<T: Clone + 'static> Stream<T>
 
     /// Creates a channel and sends the stream events through it.
     ///
-    /// This doesn't create a strong reference to the parent stream, so the sender will be dropped
+    /// This doesn't create a strong reference to the parent stream, so the channel sender will be dropped
     /// when the stream is deleted.
     pub fn as_channel(&self) -> mpsc::Receiver<T>
     {
