@@ -7,9 +7,6 @@ use types::{Callbacks, SumType2, MaybeOwned, SharedImpl};
 use helpers::{rc_and_weak, with_weak};
 use signal::Signal;
 
-#[cfg(feature="either")]
-use either::Either;
-
 /// A source of events that feeds the streams connected to it.
 #[derive(Debug)]
 pub struct Sink<T>
@@ -163,21 +160,19 @@ impl<T: 'static> Stream<T>
         Stream::new(new_cbs, (self.clone(), other.clone()))
     }
 
-    /// Merges two streams of different types using the provided function.
-    #[cfg(feature="either")]
-    pub fn merge_with<U, F, R>(&self, other: &Stream<U>, f: F) -> Stream<R>
-        where F: Fn(Either<MaybeOwned<T>, MaybeOwned<U>>) -> R + 'static,
+    /// Merges two streams of different types using two functions that return the same type.
+    pub fn merge_with<U, F1, F2, R>(&self, other: &Stream<U>, f1: F1, f2: F2) -> Stream<R>
+        where F1: Fn(MaybeOwned<T>) -> R + 'static,
+        F2: Fn(MaybeOwned<U>) -> R + 'static,
         U: 'static, R: 'static
     {
         let (new_cbs, weak1) = rc_and_weak(Callbacks::new());
         let weak2 = weak1.clone();
-        let f1 = Rc::new(f);
-        let f2 = f1.clone();
         self.cbs.push(move |arg| {
-            with_weak(&weak1, |cb| cb.call(f1(Either::Left(arg))))
+            with_weak(&weak1, |cb| cb.call(f1(arg)))
         });
         other.cbs.push(move |arg| {
-            with_weak(&weak2, |cb| cb.call(f2(Either::Right(arg))))
+            with_weak(&weak2, |cb| cb.call(f2(arg)))
         });
         Stream::new(new_cbs, (self.clone(), other.clone()))
     }

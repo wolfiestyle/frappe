@@ -10,7 +10,6 @@ keywords = ["frp", "reactive", "event", "stream"]
 license = "MIT"
 
 [features]
-default = ["either"]
 
 [dependencies]
 maybe-owned = ">= 0.3.0"

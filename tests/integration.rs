@@ -34,13 +34,12 @@ fn stream_operations()
     assert_eq!(s_last_pos.sample(), 42);
 }
 
-#[cfg(feature="either")]
 #[test]
 fn merge_with()
 {
     let sink1: Sink<i32> = Sink::new();
     let sink2: Sink<f32> = Sink::new();
-    let stream: Stream<Result<_, _>> = sink1.stream().merge_with(&sink2.stream(), |e| e.either(|l| Ok(*l), |r| Err(*r)));
+    let stream = sink1.stream().merge_with(&sink2.stream(), |l| Ok(*l), |r| Err(*r));
     let result = stream.collect::<Vec<_>>();
 
     sink1.send(1);
