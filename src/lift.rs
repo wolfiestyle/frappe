@@ -14,8 +14,7 @@ macro_rules! signal_lift
 {
     ($f:expr) => ($crate::Signal::from_fn($f));
 
-    ($f:expr, $sig1:expr) =>
-        ($crate::lift::lift1($f, $sig1));
+    ($f:expr, $sig1:expr) => ($crate::Signal::map(&$sig1, move |v| $f(v.into_owned())));
 
     ($f:expr, $sig1:expr, $sig2:expr) =>
         ($crate::lift::lift2($f, $sig1, $sig2));
@@ -88,11 +87,3 @@ lift_impl!(lift3(s1: S1, s2: S2, s3: S3)                         0 1 2);
 lift_impl!(lift4(s1: S1, s2: S2, s3: S3, s4: S4)                 0 1 2 3);
 lift_impl!(lift5(s1: S1, s2: S2, s3: S3, s4: S4, s5: S5)         0 1 2 3 4);
 lift_impl!(lift6(s1: S1, s2: S2, s3: S3, s4: S4, s5: S5, s6: S6) 0 1 2 3 4 5);
-
-/// Lifts an function with one argument.
-pub fn lift1<T, F, S1>(f: F, s1: Signal<S1>) -> Signal<T>
-    where F: Fn(S1) -> T + 'static,
-    T: 'static, S1: Clone + 'static
-{
-    s1.map(move |v| f(v.into_owned()))
-}
