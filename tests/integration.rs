@@ -206,14 +206,14 @@ fn map_n()
 fn lift()
 {
     let sink1 = Sink::new();
-    let res = signal_lift!(|a| a + 1, sink1.stream().hold(0));
+    let res = signal_lift!(|a| *a + 1, sink1.stream().hold(0));
 
     assert_eq!(res.sample(), 1);
     sink1.send(12);
     assert_eq!(res.sample(), 13);
 
     let sink2 = Sink::new();
-    let res = signal_lift!(|a, b| a.to_string() + b, sink1.stream().hold(0), sink2.stream().hold("a"));
+    let res = signal_lift!(|a, b| a.to_string() + &b, sink1.stream().hold(0), sink2.stream().hold("a"));
     let mapped = res.map(|s| format!("({})", s));
 
     assert_eq!(mapped.sample(), "(0a)");

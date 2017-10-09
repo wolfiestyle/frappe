@@ -8,7 +8,7 @@ pub extern crate either;
 mod helpers;
 pub mod types;
 mod stream;
-mod signal;
+#[macro_use] mod signal;
 pub mod lift;
 
 pub use stream::{Sink, Stream};
