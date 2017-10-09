@@ -2,8 +2,8 @@
 
 Functional Reactive Programming library inspired by [Carboxyl](https://github.com/aepsil0n/carboxyl).
 It's designed to efficiently pass objects around by avoiding cloning as much as possible, and by
-avoiding atomic operations (only Rc/RefCell used). Because of that threading is not directly supported,
-but instead it provides methods to interface with channels.
+evaluating signals only when changes happen. Threading is not directly supported, but there are methods
+that interface with channels.
 
 [Documentation](https://docs.rs/frappe)
 
