@@ -368,6 +368,23 @@ impl<T, S, F> SharedSignal<T> for SharedImpl<T, mpsc::Receiver<S>, F>
     }
 }
 
+/// Helper for using `Signal::sample_with` with multiple signals.
+///
+/// Called as: `sample_with!(s1, s2, ...; f)`
+/// where `s1: Signal<S1>, s2: Signal<S2>, ...` are N input signals,
+/// and `f(MaybeOwned<S1>, MaybeOwned<S2>, ...) -> R` is a function that takes N arguments.
+#[macro_export]
+macro_rules! sample_with
+{
+    (@impl $f:expr ; ; $($var:ident)+) => ( $f($($var),+) );
+
+    (@impl $f:expr ; $sig:expr, $($tail:expr,)* ; $($var:ident)*) => (
+        $crate::Signal::sample_with(&$sig, |a| sample_with!(@impl $f; $($tail,)*; $($var)* a))
+    );
+
+    ($($sig:expr),+ ; $f:expr) => ( sample_with!(@impl $f; $($sig,)+;) );
+}
+
 
 #[cfg(test)]
 mod tests
@@ -423,5 +440,18 @@ mod tests
         assert_eq!(signal.sample(), 13);
         assert_eq!(double.sample(), 26);
         assert_eq!(plusone.sample(), 27);
+    }
+
+    #[test]
+    fn sample_with_macro()
+    {
+        let s1 = Signal::constant(30);
+        let s2 = Signal::from_fn(|| 12);
+        let s3 = Signal::from_storage(Rc::new(SharedImpl::new(100, ())));
+
+        let res = sample_with!(s1, s2, s3;
+            |x: MaybeOwned<i32>, y: MaybeOwned<i32>, z: MaybeOwned<i32>| *x + *y + *z);
+
+        assert_eq!(res, 142);
     }
 }
