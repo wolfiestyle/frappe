@@ -190,13 +190,11 @@ impl<T: 'static> Stream<T>
     {
         let (storage, weak) = rc_and_weak(SharedImpl::new(initial, self.clone()));
         self.cbs.push(move |arg| {
-            weak.upgrade()
-                .map(|st| {
-                    let old = st.take();
-                    let new = f(old, arg);
-                    st.set(new);
-                })
-                .is_some()
+            with_weak(&weak, |st| {
+                let old = st.take();
+                let new = f(old, arg);
+                st.set(new);
+            })
         });
 
         Signal::from_storage(storage)
@@ -213,13 +211,11 @@ impl<T: 'static> Stream<T>
     {
         let (storage, weak) = rc_and_weak(SharedImpl::new(initial, self.clone()));
         self.cbs.push(move |arg| {
-            weak.upgrade()
-                .map(|st| {
-                    let old = st.get();
-                    let new = f(old, arg);
-                    st.set(new);
-                })
-                .is_some()
+            with_weak(&weak, |st| {
+                let old = st.get();
+                let new = f(old, arg);
+                st.set(new);
+            })
         });
 
         Signal::from_storage(storage)
@@ -269,9 +265,7 @@ impl<T: Clone + 'static> Stream<T>
     {
         let (storage, weak) = rc_and_weak(SharedImpl::new(initial, self.clone()));
         self.cbs.push(move |arg| {
-            weak.upgrade()
-                .map(|st| if pred(&arg) { st.set(arg.into_owned()); })
-                .is_some()
+            with_weak(&weak, |st| if pred(&arg) { st.set(arg.into_owned()); })
         });
 
         Signal::from_storage(storage)
