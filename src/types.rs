@@ -8,8 +8,9 @@ pub use maybe_owned::MaybeOwned;
 #[cfg(feature="either")]
 pub use either::Either;
 
-// function that becomes uncallable after it returns false.
-// callbacks use a MaybeOwned<T> argument so we can choose at runtime if we will send a ref or an owned value
+/// Function that becomes uncallable after it returns false.
+///
+/// Callbacks use a MaybeOwned<T> argument so we can choose at runtime if we will send a ref or an owned value.
 struct FnCell<T>
 {
     f: Box<Fn(MaybeOwned<T>) -> bool>,
@@ -45,7 +46,7 @@ impl<T> fmt::Debug for FnCell<T>
     }
 }
 
-// a collection of callbacks
+/// A collection of callbacks.
 #[derive(Debug)]
 pub(crate) struct Callbacks<T>
 {
@@ -65,8 +66,9 @@ impl<T> Callbacks<T>
         self.fs.borrow_mut().push(FnCell::new(cb))
     }
 
-    // sends a ref to the first N-1 callbacks, and the owned value to the last
-    // this way we prevent tons of cloning
+    /// Sends an owned value.
+    ///
+    /// This sends a ref to the first N-1 callbacks, and the owned value to the last.
     pub fn call(&self, arg: T)
     {
         let fs = self.fs.borrow();
@@ -85,6 +87,7 @@ impl<T> Callbacks<T>
         if n_dead > 0 { self.cleanup(n_dead); }
     }
 
+    /// Sends a value by reference.
     pub fn call_ref(&self, arg: &T)
     {
         let n_dead = self.fs.borrow().iter()
@@ -94,7 +97,9 @@ impl<T> Callbacks<T>
         if n_dead > 0 { self.cleanup(n_dead); }
     }
 
-    // we use this to passthrough an unprocessed value
+    /// Sends a MaybeOwned value.
+    ///
+    /// We use this to passthrough an unprocessed value.
     pub fn call_dyn(&self, arg: MaybeOwned<T>)
     {
         match arg
@@ -104,7 +109,7 @@ impl<T> Callbacks<T>
         }
     }
 
-    // removes the dead callbacks
+    /// Removes the dead callbacks.
     fn cleanup(&self, n_dead: usize)
     {
         if let Ok(mut fs) = self.fs.try_borrow_mut()
@@ -248,6 +253,8 @@ impl<T> Storage<T>
     }
 
     /// Sets value and increments the root serial.
+    ///
+    /// This is called by source signals.
     pub fn set(&self, val: T)
     {
         *self.val.borrow_mut() = Some(val);
@@ -255,12 +262,17 @@ impl<T> Storage<T>
     }
 
     /// Sets value and increments the local serial.
+    ///
+    /// This is called by mapped (child) signals.
     pub fn set_local(&self, val: T)
     {
         *self.val.borrow_mut() = Some(val);
         self.inc_local();
     }
 
+    /// Moves the value out and sets the storage empty.
+    ///
+    /// This needs to be paired with a .set() afterwards.
     pub fn take(&self) -> T
     {
         self.val.borrow_mut().take().expect(ERR_EMPTY)
@@ -272,16 +284,19 @@ impl<T> Storage<T>
         Ref::map(self.val.borrow(), |v| v.as_ref().expect(ERR_EMPTY))
     }
 
+    /// Checks if a parent storage has changed, so this needs update.
     pub fn must_update(&self) -> bool
     {
         self.root_ser.get() > self.serial.get()
     }
 
+    /// Increments the serial of a source signal, so child must update.
     pub fn inc_root(&self)
     {
         self.root_ser.set(self.root_ser.get().inc());
     }
 
+    /// Marks this storage as updated.
     pub fn inc_local(&self)
     {
         self.serial.set(self.root_ser.get());

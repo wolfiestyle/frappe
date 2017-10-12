@@ -14,6 +14,7 @@ use self::SigValue::*;
 #[derive(Debug)]
 pub struct Signal<T>(SigValue<T>);
 
+/// The content source of a signal.
 enum SigValue<T>
 {
     /// A signal with constant value.
@@ -26,7 +27,7 @@ enum SigValue<T>
     Dynamic(Rc<Fn() -> T>),
     /// A signal that contains shared data.
     ///
-    /// This is produced by stream methods that create a signal.
+    /// This is mainly produced by stream methods or mapping other signals.
     Shared(Rc<SharedSignal<T>>),
     /// A signal that contains a signal, and allows sampling the inner signal directly.
     ///
