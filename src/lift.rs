@@ -12,6 +12,8 @@ use signal::Signal;
 #[macro_export]
 macro_rules! signal_lift
 {
+    ($($sig:expr),+ => $f:expr) => ( signal_lift!($f, $($sig),+) );
+
     ($f:expr) => ($crate::Signal::from_fn($f));
 
     ($f:expr, $sig1:expr) => ( $crate::Signal::map(&$sig1, $f) );

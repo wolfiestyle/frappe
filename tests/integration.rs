@@ -213,7 +213,7 @@ fn lift()
     assert_eq!(res.sample(), 13);
 
     let sink2 = Sink::new();
-    let res = signal_lift!(|a, b| a.to_string() + &b, sink1.stream().hold(0), sink2.stream().hold("a"));
+    let res = signal_lift!(sink1.stream().hold(0), sink2.stream().hold("a") => |a, b| a.to_string() + &b);
     let mapped = res.map(|s| format!("({})", s));
 
     assert_eq!(mapped.sample(), "(0a)");
