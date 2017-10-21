@@ -371,9 +371,15 @@ impl<T, S, F> SharedSignal<T> for SharedImpl<T, mpsc::Receiver<S>, F>
 
 /// Helper for using `Signal::sample_with` with multiple signals.
 ///
-/// Called as: `sample_with!(s1, s2, ...; f)`
-/// where `s1: Signal<S1>, s2: Signal<S2>, ...` are N input signals,
-/// and `f(MaybeOwned<S1>, MaybeOwned<S2>, ...) -> R` is a function that takes N arguments.
+/// Called as: `sample_with!(s1, s2, ...; f)` where:
+///
+/// - `s1: Signal<S1>, s2: Signal<S2>, ...` are N input signals
+/// - `f(MaybeOwned<S1>, MaybeOwned<S2>, ...) -> R` is a function that takes N arguments
+///
+/// or as: `sample_with!(s1, s2, ... => |v1, v2, ...| expr)` where:
+///
+/// - `v1: MaybeOwned<S1>, v2: MaybeOwned<S2>, ...` are N variable names
+/// - `expr` is an expresion using those variables
 #[macro_export]
 macro_rules! sample_with
 {
@@ -383,7 +389,15 @@ macro_rules! sample_with
         $crate::Signal::sample_with(&$sig, |a| sample_with!(@impl $f; $($tail,)*; $($var)* a))
     );
 
+    (@named ; ; $e:expr) => ($e);
+
+    (@named $sig:expr, $($stail:expr,)* ; $var:ident $($vtail:ident)* ; $e:expr) => (
+        $crate::Signal::sample_with(&$sig, |$var| sample_with!(@named $($stail,)*; $($vtail)*; $e))
+    );
+
     ($($sig:expr),+ ; $f:expr) => ( sample_with!(@impl $f; $($sig,)+;) );
+
+    ($($sig:expr),+ => | $($var:ident),+ | $e:expr) => ( sample_with!(@named $($sig,)+; $($var)+; $e));
 }
 
 
@@ -448,11 +462,14 @@ mod tests
     {
         let s1 = Signal::constant(30);
         let s2 = Signal::from_fn(|| 12);
-        let s3 = Signal::from_storage(Rc::new(SharedImpl::new(100, ())));
+        let s3 = Signal::from_storage(Rc::new(SharedImpl::new(45, ())));
 
-        let res = sample_with!(s1, s2, s3;
-            |x: MaybeOwned<i32>, y: MaybeOwned<i32>, z: MaybeOwned<i32>| *x + *y + *z);
-
+        let a = 55;
+        let res = sample_with!(s1, s2, s3 => |x, y, z| *x + *y + *z + a);
         assert_eq!(res, 142);
+
+        let f = |a: MaybeOwned<i32>, b: MaybeOwned<i32>, c: MaybeOwned<i32>| *a + *b + *c;
+        let res = sample_with!(s1, s2, s3; f);
+        assert_eq!(res, 87);
     }
 }
