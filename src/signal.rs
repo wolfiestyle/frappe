@@ -99,7 +99,7 @@ impl<T: Clone> Signal<T>
     {
         match self.0
         {
-            Constant(ref val) => (**val).clone(),
+            Constant(ref val) => T::clone(val),
             Dynamic(ref f) => f(),
             Shared(ref s) => { s.update(); s.sample().clone() },
             Nested(ref f) => f().sample(),
@@ -185,7 +185,7 @@ impl<T: 'static> Signal<Signal<T>>
         match self.0
         {
             // constant signal: just extract the inner signal
-            Constant(ref sig) => (**sig).clone(),
+            Constant(ref sig) => Signal::clone(sig),
             // dynamic signal: re-label as nested
             Dynamic(ref f) => Signal(Nested(f.clone())),
             // shared signal: sample to extract the inner signal
