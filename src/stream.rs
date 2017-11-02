@@ -366,7 +366,7 @@ impl<T: 'static> Stream<Stream<T>>
     pub fn switch(&self) -> Stream<T>
     {
         let (new_cbs, weak) = rc_and_weak(Callbacks::new());
-        let id = Rc::new(Cell::new(0u64));  // id of each stream sent
+        let id = Rc::new(Cell::new(0usize));  // id of each stream sent
         self.cbs.push(move |stream| {
             if weak.upgrade().is_none() { return false }
             let cbs_w = weak.clone();
