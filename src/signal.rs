@@ -256,7 +256,7 @@ impl<T: fmt::Debug> fmt::Debug for SigValue<T>
         {
             Constant(ref val) => write!(f, "Constant({:?})", val),
             Dynamic(ref rf) => write!(f, "Dynamic(Fn@{:p})", rf),
-            Shared(ref rs) => write!(f, "Shared(SignalShared@{:p})", rs),
+            Shared(ref rs) => write!(f, "Shared(SharedSignal@{:p})", rs),
             Nested(ref rf) => write!(f, "Nested(Fn@{:p})", rf),
         }
     }
