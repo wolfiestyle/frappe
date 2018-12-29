@@ -1,14 +1,12 @@
 //! FRP benchmarks from https://github.com/aepsil0n/carboxyl
-#![feature(test)]
-
-extern crate test;
+#[macro_use]
+extern crate bencher;
 extern crate rand;
 extern crate frappe;
 
-use test::Bencher;
-use rand::{XorShiftRng, sample};
+use bencher::Bencher;
+use rand::prelude::*;
 use frappe::{Sink, Stream};
-
 
 /// First-order benchmark.
 ///
@@ -25,37 +23,38 @@ fn first_order(n_sinks: usize, n_steps: usize, b: &mut Bencher) {
         .collect();
 
     // Feed events
-    let mut rng = XorShiftRng::new_unseeded();
+    let mut rng = rand::thread_rng();
     b.iter(|| for k in 0..n_steps {
         let s = format!("{}", k);
-        for sink in sample(&mut rng, sinks.iter(), 10) {
+        for sink in sinks.choose_multiple(&mut rng, 10) {
             sink.send(s.clone());
         }
     });
 }
 
-#[bench]
 fn first_order_100(b: &mut Bencher) {
     first_order(1_000, 100, b);
 }
 
-#[bench]
 fn first_order_1k(b: &mut Bencher) {
     first_order(1_000, 1_000, b);
 }
 
-#[bench]
 fn first_order_10k(b: &mut Bencher) {
     first_order(1_000, 10_000, b);
 }
 
 /// A small reference benchmark to do the same amount of actual work without FRP
-#[bench]
 fn first_order_1k_ref(b: &mut Bencher) {
-    let mut rng = XorShiftRng::new_unseeded();
+    let mut rng = rand::thread_rng();
+    let dist = rand::distributions::Uniform::new_inclusive(0, 1000);
     b.iter(|| for i in 0..1_000 {
-        for _k in sample(&mut rng, 0..1_000, 10) {
+        for _k in rng.sample_iter(&dist).take(10) {
             format!("{}", i);
         }
     });
 }
+
+
+benchmark_group!(first_order_, first_order_100, first_order_1k, first_order_10k, first_order_1k_ref);
+benchmark_main!(first_order_);

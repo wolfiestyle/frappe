@@ -1,13 +1,11 @@
 //! Simple benchmarks, from https://github.com/aepsil0n/carboxyl
-#![feature(test)]
-
-extern crate test;
+#[macro_use]
+extern crate bencher;
 extern crate frappe;
 
-use test::Bencher;
+use bencher::Bencher;
 use frappe::Sink;
 
-#[bench]
 fn bench_chain(b: &mut Bencher) {
     let sink: Sink<i32> = Sink::new();
     let _ = sink.stream()
@@ -17,3 +15,7 @@ fn bench_chain(b: &mut Bencher) {
         .hold(15);
     b.iter(|| sink.send(-5));
 }
+
+
+benchmark_group!(simple, bench_chain);
+benchmark_main!(simple);

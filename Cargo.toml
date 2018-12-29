@@ -16,4 +16,17 @@ maybe-owned = ">= 0.3.0"
 either = { version = "1.1.0", optional = true }
 
 [dev-dependencies]
-rand = "0.3.16"
+rand = "0.6.1"
+bencher = "0.1.5"
+
+[[bench]]
+name = "simple"
+harness = false
+
+[[bench]]
+name = "first_order"
+harness = false
+
+[[bench]]
+name = "second_order"
+harness = false

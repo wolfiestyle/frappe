@@ -1,14 +1,12 @@
 //! FRP benchmarks from https://github.com/aepsil0n/carboxyl
-#![feature(test)]
-
-extern crate test;
+#[macro_use]
+extern crate bencher;
 extern crate rand;
 extern crate frappe;
 
-use test::Bencher;
-use rand::{XorShiftRng, sample};
+use bencher::Bencher;
+use rand::prelude::*;
 use frappe::Sink;
-
 
 /// Second-order benchmark.
 ///
@@ -35,27 +33,28 @@ fn second_order(n_sinks: usize, n_steps: usize, b: &mut Bencher) {
     let signal = walker.hold(counters[0].clone()).switch();
 
     // Feed events
-    let mut rng = XorShiftRng::new_unseeded();
+    let mut rng = rand::thread_rng();
     b.iter(|| for i in 0..n_steps {
         stepper.send(i);
-        for sink in sample(&mut rng, sinks.iter(), 10) {
+        for sink in sinks.choose_multiple(&mut rng, 10) {
             sink.send(());
         }
         format!("{}", signal.sample());
     });
 }
 
-#[bench]
 fn second_order_100(b: &mut Bencher) {
     second_order(1_000, 100, b);
 }
 
-#[bench]
 fn second_order_1k(b: &mut Bencher) {
     second_order(1_000, 1_000, b);
 }
 
-#[bench]
 fn second_order_10k(b: &mut Bencher) {
     second_order(1_000, 10_000, b);
 }
+
+
+benchmark_group!(second_order_, second_order_100, second_order_1k, second_order_10k);
+benchmark_main!(second_order_);
