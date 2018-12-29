@@ -1,6 +1,4 @@
-#[macro_use]
-extern crate frappe;
-use frappe::{Sink, Stream, Signal};
+use frappe::{Sink, Stream, Signal, signal_lift};
 use std::rc::Rc;
 use std::fmt::Debug;
 

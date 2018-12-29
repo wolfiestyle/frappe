@@ -1,5 +1,3 @@
-extern crate frappe;
-extern crate rand;
 use frappe::Sink;
 use rand::Rng;
 
@@ -13,7 +11,7 @@ use std::time::Duration;
 #[derive(Clone)]
 struct Updater
 {
-    jobs: Rc<RefCell<Vec<Box<Fn() -> bool>>>>,
+    jobs: Rc<RefCell<Vec<Box<dyn Fn() -> bool>>>>,
     main_thread: Thread,
 }
 

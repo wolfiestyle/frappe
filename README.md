@@ -10,7 +10,6 @@ that interface with channels.
 ## Usage
 
 ```Rust
-extern crate frappe;
 use frappe::Sink;
 
 fn main()

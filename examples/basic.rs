@@ -1,4 +1,3 @@
-extern crate frappe;
 use frappe::Sink;
 
 fn main()

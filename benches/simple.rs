@@ -1,9 +1,6 @@
 //! Simple benchmarks, from https://github.com/aepsil0n/carboxyl
-#[macro_use]
-extern crate bencher;
-extern crate frappe;
 
-use bencher::Bencher;
+use bencher::{Bencher, benchmark_group, benchmark_main};
 use frappe::Sink;
 
 fn bench_chain(b: &mut Bencher) {

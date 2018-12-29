@@ -13,19 +13,19 @@ pub use either::Either;
 /// Callbacks use a MaybeOwned<T> argument so we can choose at runtime if we will send a ref or an owned value.
 struct FnCell<T>
 {
-    f: Box<Fn(MaybeOwned<T>) -> bool>,
+    f: Box<dyn Fn(MaybeOwned<'_, T>) -> bool>,
     alive: Cell<bool>,
 }
 
 impl<T> FnCell<T>
 {
     fn new<F>(f: F) -> Self
-        where F: Fn(MaybeOwned<T>) -> bool + 'static
+        where F: Fn(MaybeOwned<'_, T>) -> bool + 'static
     {
         FnCell{ f: Box::new(f), alive: Cell::new(true) }
     }
 
-    fn call(&self, arg: MaybeOwned<T>) -> bool
+    fn call(&self, arg: MaybeOwned<'_, T>) -> bool
     {
         let is_alive = self.alive.get() && (self.f)(arg);
         self.alive.set(is_alive);
@@ -40,7 +40,7 @@ impl<T> FnCell<T>
 
 impl<T> fmt::Debug for FnCell<T>
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
     {
         write!(f, "FnCell {{ f: Fn@{:p}, alive: {} }}", self.f, self.alive.get())
     }
@@ -61,7 +61,7 @@ impl<T> Callbacks<T>
     }
 
     pub fn push<F>(&self, cb: F)
-        where F: Fn(MaybeOwned<T>) -> bool + 'static
+        where F: Fn(MaybeOwned<'_, T>) -> bool + 'static
     {
         self.fs.borrow_mut().push(FnCell::new(cb))
     }
@@ -100,7 +100,7 @@ impl<T> Callbacks<T>
     /// Sends a MaybeOwned value.
     ///
     /// We use this to passthrough an unprocessed value.
-    pub fn call_dyn(&self, arg: MaybeOwned<T>)
+    pub fn call_dyn(&self, arg: MaybeOwned<'_, T>)
     {
         match arg
         {
@@ -221,7 +221,7 @@ pub(crate) struct Storage<T>
     pub root_ser: Rc<Cell<SerialId>>,
 }
 
-const ERR_EMPTY: &'static str = "storage empty";
+const ERR_EMPTY: &str = "storage empty";
 
 impl<T> Storage<T>
 {
@@ -279,7 +279,7 @@ impl<T> Storage<T>
     }
 
     /// Gets the value as a std::cell::Ref
-    pub fn borrow(&self) -> Ref<T>
+    pub fn borrow(&self) -> Ref<'_, T>
     {
         Ref::map(self.val.borrow(), |v| v.as_ref().expect(ERR_EMPTY))
     }
@@ -336,7 +336,7 @@ pub(crate) trait SharedSignal<T>
     fn update(&self);
     fn has_changed(&self) -> bool;
     fn storage(&self) -> &Storage<T>;
-    fn sample(&self) -> Ref<T>;
+    fn sample(&self) -> Ref<'_, T>;
 }
 
 /// Common template for shared signal implementations.

@@ -1,8 +1,9 @@
 //! Utilities for lifting functions into signals.
 
 use std::cell::Ref;
-use types::{Storage, SharedSignal, SharedImpl, MaybeOwned};
-use signal::Signal;
+use crate::types::{Storage, SharedSignal, SharedImpl, MaybeOwned};
+use crate::signal::Signal;
+use crate::sample_with;
 
 /// Maps a function over the value of signals.
 ///
@@ -38,7 +39,7 @@ macro_rules! lift_impl
 {
     ($fname:ident ( $($vname:ident : $tname:ident),+ ) $($idx:tt)+) => (
         impl<T, $($tname,)+ F> SharedSignal<T> for SharedImpl<T, ($(Signal<$tname>),+), F>
-            where F: Fn($(MaybeOwned<$tname>),+) -> T + 'static,
+            where F: Fn($(MaybeOwned<'_, $tname>),+) -> T + 'static,
             $($tname: 'static),+
         {
             fn update(&self)
@@ -59,7 +60,7 @@ macro_rules! lift_impl
                 &self.storage
             }
 
-            fn sample(&self) -> Ref<T>
+            fn sample(&self) -> Ref<'_, T>
             {
                 if self.has_changed()
                 {
@@ -72,7 +73,7 @@ macro_rules! lift_impl
 
         /// Lifts a function into a signal.
         pub fn $fname<T, F, $($tname),+>(f: F, $($vname: Signal<$tname>),+) -> Signal<T>
-            where F: Fn($(MaybeOwned<$tname>),+) -> T + 'static,
+            where F: Fn($(MaybeOwned<'_, $tname>),+) -> T + 'static,
             T: 'static, $($tname: 'static),+
         {
             Signal::shared(SharedImpl{

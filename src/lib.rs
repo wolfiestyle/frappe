@@ -1,15 +1,15 @@
 //! Functional Reactive Programming library for Rust
 #![warn(missing_docs)]
 
-pub extern crate maybe_owned;
+pub use maybe_owned;
 #[cfg(feature="either")]
-pub extern crate either;
+pub use either;
 
 mod helpers;
 pub mod types;
 mod stream;
-#[macro_use] mod signal;
+mod signal;
 pub mod lift;
 
-pub use stream::{Sink, Stream};
-pub use signal::Signal;
+pub use crate::stream::{Sink, Stream};
+pub use crate::signal::Signal;

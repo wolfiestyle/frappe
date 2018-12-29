@@ -1,11 +1,7 @@
 //! FRP benchmarks from https://github.com/aepsil0n/carboxyl
-#[macro_use]
-extern crate bencher;
-extern crate rand;
-extern crate frappe;
 
-use bencher::Bencher;
 use rand::prelude::*;
+use bencher::{Bencher, benchmark_group, benchmark_main};
 use frappe::{Sink, Stream};
 
 /// First-order benchmark.

@@ -2,8 +2,8 @@ use std::rc::Rc;
 use std::cell::Ref;
 use std::sync::mpsc;
 use std::fmt;
-use types::{MaybeOwned, Storage, SharedSignal, SharedImpl};
-use stream::Stream;
+use crate::types::{MaybeOwned, Storage, SharedSignal, SharedImpl};
+use crate::stream::Stream;
 
 use self::SigValue::*;
 
@@ -24,15 +24,15 @@ enum SigValue<T>
     /// A signal that generates it's values from a function.
     ///
     /// This is produced by `Signal::from_fn`
-    Dynamic(Rc<Fn() -> T>),
+    Dynamic(Rc<dyn Fn() -> T>),
     /// A signal that contains shared data.
     ///
     /// This is mainly produced by stream methods or mapping other signals.
-    Shared(Rc<SharedSignal<T>>),
+    Shared(Rc<dyn SharedSignal<T>>),
     /// A signal that contains a signal, and allows sampling the inner signal directly.
     ///
     /// This is produced by `Signal::switch`
-    Nested(Rc<Fn() -> Signal<T>>),
+    Nested(Rc<dyn Fn() -> Signal<T>>),
 }
 
 impl<T> Signal<T>
@@ -78,7 +78,7 @@ impl<T> Signal<T>
     /// This is meant to be the most efficient way when cloning is undesirable,
     /// but it requires a callback to prevent outliving internal borrows.
     pub fn sample_with<F, R>(&self, cb: F) -> R
-        where F: FnOnce(MaybeOwned<T>) -> R
+        where F: FnOnce(MaybeOwned<'_, T>) -> R
     {
         match self.0
         {
@@ -113,7 +113,7 @@ impl<T: 'static> Signal<T>
     ///
     /// The closure is called only when the parent signal changes.
     pub fn map<F, R>(&self, f: F) -> Signal<R>
-        where F: Fn(MaybeOwned<T>) -> R + 'static,
+        where F: Fn(MaybeOwned<'_, T>) -> R + 'static,
         R: 'static
     {
         match self.0 {
@@ -137,7 +137,7 @@ impl<T: 'static> Signal<T>
 
     /// Samples the value of this signal every time the trigger stream fires.
     pub fn snapshot<S, F, R>(&self, trigger: &Stream<S>, f: F) -> Stream<R>
-        where F: Fn(MaybeOwned<T>, MaybeOwned<S>) -> R + 'static,
+        where F: Fn(MaybeOwned<'_, T>, MaybeOwned<'_, S>) -> R + 'static,
         S: 'static, R: 'static
     {
         let this = self.clone();
@@ -250,7 +250,7 @@ impl<T> Clone for Signal<T>
 
 impl<T: fmt::Debug> fmt::Debug for SigValue<T>
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
     {
         match *self
         {
@@ -265,7 +265,7 @@ impl<T: fmt::Debug> fmt::Debug for SigValue<T>
 impl<T: fmt::Display> fmt::Display for Signal<T>
 {
     /// Samples the signal and formats the value.
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
     {
         self.sample_with(|val| fmt::Display::fmt(&*val, f))
     }
@@ -299,7 +299,7 @@ impl<T, S> SharedSignal<T> for SharedImpl<T, S, ()>
         &self.storage
     }
 
-    fn sample(&self) -> Ref<T>
+    fn sample(&self) -> Ref<'_, T>
     {
         self.storage.borrow()
     }
@@ -307,8 +307,8 @@ impl<T, S> SharedSignal<T> for SharedImpl<T, S, ()>
 
 // A signal that maps a parent shared signal.
 
-impl<T, P, F> SharedSignal<T> for SharedImpl<T, Rc<SharedSignal<P>>, F>
-    where F: Fn(MaybeOwned<P>) -> T + 'static
+impl<T, P, F> SharedSignal<T> for SharedImpl<T, Rc<dyn SharedSignal<P>>, F>
+    where F: Fn(MaybeOwned<'_, P>) -> T + 'static
 {
     fn update(&self)
     {
@@ -325,7 +325,7 @@ impl<T, P, F> SharedSignal<T> for SharedImpl<T, Rc<SharedSignal<P>>, F>
         &self.storage
     }
 
-    fn sample(&self) -> Ref<T>
+    fn sample(&self) -> Ref<'_, T>
     {
         if self.has_changed()
         {
@@ -361,7 +361,7 @@ impl<T, S, F> SharedSignal<T> for SharedImpl<T, mpsc::Receiver<S>, F>
         &self.storage
     }
 
-    fn sample(&self) -> Ref<T>
+    fn sample(&self) -> Ref<'_, T>
     {
         self.update();
         self.storage.inc_local();
@@ -468,7 +468,7 @@ mod tests
         let res = sample_with!(s1, s2, s3 => |x, y, z| *x + *y + *z + a);
         assert_eq!(res, 142);
 
-        let f = |a: MaybeOwned<i32>, b: MaybeOwned<i32>, c: MaybeOwned<i32>| *a + *b + *c;
+        let f = |a: MaybeOwned<'_, i32>, b: MaybeOwned<'_, i32>, c: MaybeOwned<'_, i32>| *a + *b + *c;
         let res = sample_with!(s1, s2, s3; f);
         assert_eq!(res, 87);
     }

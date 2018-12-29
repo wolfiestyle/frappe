@@ -3,9 +3,9 @@ use std::cell::Cell;
 use std::sync::mpsc;
 use std::any::Any;
 use std::iter;
-use types::{Callbacks, SumType2, MaybeOwned, SharedImpl};
-use helpers::{rc_and_weak, with_weak};
-use signal::Signal;
+use crate::types::{Callbacks, SumType2, MaybeOwned, SharedImpl};
+use crate::helpers::{rc_and_weak, with_weak};
+use crate::signal::Signal;
 
 /// A source of events that feeds the streams connected to it.
 #[derive(Debug)]
@@ -95,7 +95,7 @@ impl<T> Clone for Sink<T>
 pub struct Stream<T>
 {
     cbs: Rc<Callbacks<T>>,
-    source: Rc<Any>,  // strong reference to a parent Stream
+    source: Rc<dyn Any>,  // strong reference to a parent Stream
 }
 
 impl<T> Stream<T>
@@ -117,7 +117,7 @@ impl<T: 'static> Stream<T>
     /// Maps this stream into another stream using the provided function.
     #[inline]
     pub fn map<F, R>(&self, f: F) -> Stream<R>
-        where F: Fn(MaybeOwned<T>) -> R + 'static,
+        where F: Fn(MaybeOwned<'_, T>) -> R + 'static,
         R: 'static
     {
         self.filter_map(move |arg| Some(f(arg)))
@@ -136,7 +136,7 @@ impl<T: 'static> Stream<T>
 
     /// Filter and map a stream simultaneously.
     pub fn filter_map<F, R>(&self, f: F) -> Stream<R>
-        where F: Fn(MaybeOwned<T>) -> Option<R> + 'static,
+        where F: Fn(MaybeOwned<'_, T>) -> Option<R> + 'static,
         R: 'static
     {
         let (new_cbs, weak) = rc_and_weak(Callbacks::new());
@@ -162,8 +162,8 @@ impl<T: 'static> Stream<T>
 
     /// Merges two streams of different types using two functions that return the same type.
     pub fn merge_with<U, F1, F2, R>(&self, other: &Stream<U>, f1: F1, f2: F2) -> Stream<R>
-        where F1: Fn(MaybeOwned<T>) -> R + 'static,
-        F2: Fn(MaybeOwned<U>) -> R + 'static,
+        where F1: Fn(MaybeOwned<'_, T>) -> R + 'static,
+        F2: Fn(MaybeOwned<'_, U>) -> R + 'static,
         U: 'static, R: 'static
     {
         let (new_cbs, weak1) = rc_and_weak(Callbacks::new());
@@ -185,7 +185,7 @@ impl<T: 'static> Stream<T>
     /// someone puts back a value on it.
     /// If this is undesirable, use `Stream::fold_clone` instead.
     pub fn fold<A, F>(&self, initial: A, f: F) -> Signal<A>
-        where F: Fn(A, MaybeOwned<T>) -> A + 'static,
+        where F: Fn(A, MaybeOwned<'_, T>) -> A + 'static,
         A: 'static
     {
         let (storage, weak) = rc_and_weak(SharedImpl::new(initial, self.clone()));
@@ -206,7 +206,7 @@ impl<T: 'static> Stream<T>
     /// storage will remain unchanged and later attempts at sampling will succeed like nothing
     /// happened.
     pub fn fold_clone<A, F>(&self, initial: A, f: F) -> Signal<A>
-        where F: Fn(A, MaybeOwned<T>) -> A + 'static,
+        where F: Fn(A, MaybeOwned<'_, T>) -> A + 'static,
         A: Clone + 'static
     {
         let (storage, weak) = rc_and_weak(SharedImpl::new(initial, self.clone()));
@@ -229,7 +229,7 @@ impl<T: 'static> Stream<T>
     /// This primitive is useful to construct asynchronous operations, since you can
     /// store the sink for later usage.
     pub fn map_n<F, R>(&self, f: F) -> Stream<R>
-        where F: Fn(MaybeOwned<T>, Sink<R>) + 'static,
+        where F: Fn(MaybeOwned<'_, T>, Sink<R>) + 'static,
         R: 'static
     {
         let (new_cbs, weak) = rc_and_weak(Callbacks::new());
@@ -243,7 +243,7 @@ impl<T: 'static> Stream<T>
     ///
     /// This is meant to be used as a debugging tool and not to cause side effects.
     pub fn inspect<F>(self, f: F) -> Self
-        where F: Fn(MaybeOwned<T>) + 'static
+        where F: Fn(MaybeOwned<'_, T>) + 'static
     {
         self.cbs.push(move |arg| { f(arg); true });
         self
