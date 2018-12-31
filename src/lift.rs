@@ -1,13 +1,11 @@
 //! Utilities for lifting functions into signals.
 
-use std::cell::Ref;
-use crate::types::{Storage, SharedSignal, SharedImpl, MaybeOwned};
+use crate::types::{Storage, SharedSignal, SharedImpl};
 use crate::signal::Signal;
-use crate::sample_with;
 
 /// Maps a function over the value of signals.
 ///
-/// This converts a function `Fn(MaybeOwned<A>, MaybeOwned<B>, ...) -> R` and the signals `Signal<A>, Signal<B>, ...`
+/// This converts a function `Fn(A, B, ...) -> R` and the signals `Signal<A>, Signal<B>, ...`
 /// into a `Signal<R>` that computes it's value by sampling the input signals and then
 /// calling the supplied function.
 #[macro_export]
@@ -39,8 +37,8 @@ macro_rules! lift_impl
 {
     ($fname:ident ( $($vname:ident : $tname:ident),+ ) $($idx:tt)+) => (
         impl<T, $($tname,)+ F> SharedSignal<T> for SharedImpl<T, ($(Signal<$tname>),+), F>
-            where F: Fn($(MaybeOwned<'_, $tname>),+) -> T + 'static,
-            $($tname: 'static),+
+            where F: Fn($($tname),+) -> T + 'static,
+            $($tname: Clone + 'static),+
         {
             fn update(&self)
             {
@@ -55,26 +53,26 @@ macro_rules! lift_impl
                 self.storage.must_update()
             }
 
-            fn storage(&self) -> &Storage<T>
+            fn get_storage(&self) -> &Storage<T>
             {
                 &self.storage
             }
 
-            fn sample(&self) -> Ref<'_, T>
+            fn sample(&self) -> &Storage<T>
             {
                 if self.has_changed()
                 {
-                    let val = sample_with!($(self.source.$idx),+; self.f);
+                    let val = (self.f)($(self.source.$idx.sample()),+);
                     self.storage.set_local(val);
                 }
-                self.storage.borrow()
+                &self.storage
             }
         }
 
         /// Lifts a function into a signal.
         pub fn $fname<T, F, $($tname),+>(f: F, $($vname: Signal<$tname>),+) -> Signal<T>
-            where F: Fn($(MaybeOwned<'_, $tname>),+) -> T + 'static,
-            T: 'static, $($tname: 'static),+
+            where F: Fn($($tname),+) -> T + 'static,
+            T: 'static, $($tname: Clone + 'static),+
         {
             Signal::shared(SharedImpl{
                 storage: Default::default(),

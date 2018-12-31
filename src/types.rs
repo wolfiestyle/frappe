@@ -1,7 +1,7 @@
 //! Miscellaneous types used by the library.
 
 use std::rc::Rc;
-use std::cell::{Cell, RefCell, Ref};
+use std::cell::{Cell, RefCell};
 use std::{fmt, ops};
 
 pub use maybe_owned::MaybeOwned;
@@ -213,10 +213,9 @@ impl<L, R> SumType2 for ::either::Either<L, R>
 }
 
 /// Storage cell for shared signal values.
-#[derive(Debug)]
 pub(crate) struct Storage<T>
 {
-    val: RefCell<Option<T>>,
+    val: Cell<Option<T>>,
     serial: Cell<SerialId>,
     pub root_ser: Rc<Cell<SerialId>>,
 }
@@ -229,7 +228,7 @@ impl<T> Storage<T>
     pub fn new(val: T) -> Self
     {
         Storage{
-            val: RefCell::new(Some(val)),
+            val: Cell::new(Some(val)),
             serial: Cell::new(SERIAL_ONE),
             root_ser: Rc::new(Cell::new(SERIAL_ONE)),
         }
@@ -239,7 +238,7 @@ impl<T> Storage<T>
     pub fn inherit<P>(parent: &Storage<P>) -> Self
     {
         Storage{
-            val: RefCell::new(None),
+            val: Cell::new(None),
             serial: Default::default(),
             root_ser: parent.root_ser.clone(),
         }
@@ -249,7 +248,10 @@ impl<T> Storage<T>
     pub fn get(&self) -> T
         where T: Clone
     {
-        self.val.borrow().clone().expect(ERR_EMPTY)
+        let val = self.val.replace(None);
+        let cloned = val.clone();
+        self.val.set(val);
+        cloned.expect(ERR_EMPTY)
     }
 
     /// Sets value and increments the root serial.
@@ -257,7 +259,7 @@ impl<T> Storage<T>
     /// This is called by source signals.
     pub fn set(&self, val: T)
     {
-        *self.val.borrow_mut() = Some(val);
+        self.val.set(Some(val));
         self.inc_root();
     }
 
@@ -266,7 +268,7 @@ impl<T> Storage<T>
     /// This is called by mapped (child) signals.
     pub fn set_local(&self, val: T)
     {
-        *self.val.borrow_mut() = Some(val);
+        self.val.set(Some(val));
         self.inc_local();
     }
 
@@ -275,13 +277,7 @@ impl<T> Storage<T>
     /// This needs to be paired with a .set() afterwards.
     pub fn take(&self) -> T
     {
-        self.val.borrow_mut().take().expect(ERR_EMPTY)
-    }
-
-    /// Gets the value as a std::cell::Ref
-    pub fn borrow(&self) -> Ref<'_, T>
-    {
-        Ref::map(self.val.borrow(), |v| v.as_ref().expect(ERR_EMPTY))
+        self.val.replace(None).expect(ERR_EMPTY)
     }
 
     /// Checks if a parent storage has changed, so this needs update.
@@ -308,7 +304,7 @@ impl<T> Default for Storage<T>
     fn default() -> Self
     {
         Storage{
-            val: RefCell::new(None),
+            val: Cell::new(None),
             serial: Default::default(),
             root_ser: Rc::new(Cell::new(SERIAL_ONE)),
         }
@@ -316,7 +312,7 @@ impl<T> Default for Storage<T>
 }
 
 /// A counter on how many times a signal value has been modified.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub(crate) struct SerialId(u64);
 
 /// The serial id of a constant value.
@@ -333,10 +329,14 @@ impl SerialId
 /// Defines a signal that contains shared storage.
 pub(crate) trait SharedSignal<T>
 {
+    /// Updates the signal.
     fn update(&self);
+    /// Checks if the value has changed.
     fn has_changed(&self) -> bool;
-    fn storage(&self) -> &Storage<T>;
-    fn sample(&self) -> Ref<'_, T>;
+    /// Obtains the internal storage.
+    fn get_storage(&self) -> &Storage<T>;
+    /// Samples the signal.
+    fn sample(&self) -> &Storage<T>;
 }
 
 /// Common template for shared signal implementations.

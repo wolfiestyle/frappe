@@ -29,6 +29,5 @@ fn main()
     println!("last: {}", last.sample());
     // printing a signal samples it
     println!("sum: {}", sum);
-    // `sample_with` gets a reference to the internal value, no clone needed
-    half_even.sample_with(|v| println!("half_even: {:?}", v));
+    println!("half_even: {:?}", half_even.sample());
 }

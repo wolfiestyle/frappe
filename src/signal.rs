@@ -1,5 +1,4 @@
 use std::rc::Rc;
-use std::cell::Ref;
 use std::sync::mpsc;
 use std::fmt;
 use crate::types::{MaybeOwned, Storage, SharedSignal, SharedImpl};
@@ -11,16 +10,15 @@ use self::SigValue::*;
 ///
 /// Signals are usually constructed by stream operations and can be read using the `sample` or
 /// `sample_with` methods. They update lazily when someone reads them.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Signal<T>(SigValue<T>);
 
 /// The content source of a signal.
+#[derive(Clone)]
 enum SigValue<T>
 {
     /// A signal with constant value.
-    ///
-    /// We store the value in a Rc to provide Clone support without a `T: Clone` bound.
-    Constant(Rc<T>),
+    Constant(T),
     /// A signal that generates it's values from a function.
     ///
     /// This is produced by `Signal::from_fn`
@@ -41,9 +39,9 @@ impl<T> Signal<T>
     ///
     /// The value is assumed to be constant, so changing it while it's stored on the
     /// signal is a logic error and will cause unexpected results.
-    pub fn constant<V: Into<Rc<T>>>(val: V) -> Self
+    pub fn constant(val: T) -> Self
     {
-        Signal(Constant(val.into()))
+        Signal(Constant(val))
     }
 
     /// Creates a signal that samples it's values from an external source.
@@ -73,19 +71,18 @@ impl<T> Signal<T>
         }
     }
 
-    /// Sample by reference.
+    /// Moves the value out of the signal.
     ///
-    /// This is meant to be the most efficient way when cloning is undesirable,
-    /// but it requires a callback to prevent outliving internal borrows.
-    pub fn sample_with<F, R>(&self, cb: F) -> R
-        where F: FnOnce(MaybeOwned<'_, T>) -> R
+    /// This may leave the internal storage empty, so calling `sample` on other signals that
+    /// reference this storage will panic.
+    pub fn take(self) -> T
     {
         match self.0
         {
-            Constant(ref val) => cb(MaybeOwned::Borrowed(val)),
-            Dynamic(ref f) => cb(MaybeOwned::Owned(f())),
-            Shared(ref s) => { s.update(); cb(MaybeOwned::Borrowed(&s.sample())) },
-            Nested(ref f) => f().sample_with(cb),
+            Constant(val) => val,
+            Dynamic(f) => f(),
+            Shared(s) => { s.update(); s.sample().take() },
+            Nested(f) => f().take(),
         }
     }
 }
@@ -101,7 +98,7 @@ impl<T: Clone> Signal<T>
         {
             Constant(ref val) => T::clone(val),
             Dynamic(ref f) => f(),
-            Shared(ref s) => { s.update(); s.sample().clone() },
+            Shared(ref s) => { s.update(); s.sample().get() },
             Nested(ref f) => f().sample(),
         }
     }
@@ -114,7 +111,7 @@ impl<T: 'static> Signal<T>
     /// The closure is called only when the parent signal changes.
     pub fn map<F, R>(&self, f: F) -> Signal<R>
         where F: Fn(MaybeOwned<'_, T>) -> R + 'static,
-        R: 'static
+        T: Clone, R: 'static
     {
         match self.0 {
             // constant signal: apply f once to produce another constant signal
@@ -123,14 +120,14 @@ impl<T: 'static> Signal<T>
             }
             // shared signal: apply f only when the parent signal has changed
             Shared(ref sig) => Signal::shared(SharedImpl{
-                storage: Storage::inherit(sig.storage()),
+                storage: Storage::inherit(sig.get_storage()),
                 source: sig.clone(),
                 f,
             }),
             // dynamic/nested signal: apply f unconditionally
             Dynamic(_) | Nested(_) => {
                 let this = self.clone();
-                Signal::from_fn(move || this.sample_with(&f))
+                Signal::from_fn(move || f(MaybeOwned::Owned(this.sample())))
             }
         }
     }
@@ -138,10 +135,10 @@ impl<T: 'static> Signal<T>
     /// Samples the value of this signal every time the trigger stream fires.
     pub fn snapshot<S, F, R>(&self, trigger: &Stream<S>, f: F) -> Stream<R>
         where F: Fn(MaybeOwned<'_, T>, MaybeOwned<'_, S>) -> R + 'static,
-        S: 'static, R: 'static
+        T: Clone, S: 'static, R: 'static
     {
         let this = self.clone();
-        trigger.map(move |b| this.sample_with(|a| f(a, b)))
+        trigger.map(move |b| f(MaybeOwned::Owned(this.sample()), b))
     }
 
     /// Creates a signal from a shared value.
@@ -177,7 +174,7 @@ impl<T: 'static> Signal<T>
     }
 }
 
-impl<T: 'static> Signal<Signal<T>>
+impl<T: Clone + 'static> Signal<Signal<T>>
 {
     /// Creates a new signal that samples the inner value of a nested signal.
     pub fn switch(&self) -> Signal<T>
@@ -191,7 +188,7 @@ impl<T: 'static> Signal<Signal<T>>
             // shared signal: sample to extract the inner signal
             Shared(ref sig_) => {
                 let sig = sig_.clone();
-                Signal(Nested(Rc::new(move || { sig.update(); sig.sample().clone() })))
+                Signal(Nested(Rc::new(move || { sig.update(); sig.sample().get() })))
             }
             // nested signal: remove one layer
             Nested(ref f_) => {
@@ -222,32 +219,6 @@ impl<T> From<T> for Signal<T>
     }
 }
 
-impl<T> From<Rc<T>> for Signal<T>
-{
-    /// Creates a constant signal from T (avoids re-wrapping the Rc).
-    #[inline]
-    fn from(val: Rc<T>) -> Self
-    {
-        Signal(Constant(val))
-    }
-}
-
-// the derive impl adds a `T: Clone` we don't want
-impl<T> Clone for Signal<T>
-{
-    /// Creates a copy of this signal that references the same value.
-    fn clone(&self) -> Self
-    {
-        Signal(match self.0
-        {
-            Constant(ref val) => Constant(val.clone()),
-            Dynamic(ref rf) => Dynamic(rf.clone()),
-            Shared(ref rs) => Shared(rs.clone()),
-            Nested(ref rf) => Nested(rf.clone()),
-        })
-    }
-}
-
 impl<T: fmt::Debug> fmt::Debug for SigValue<T>
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
@@ -262,12 +233,12 @@ impl<T: fmt::Debug> fmt::Debug for SigValue<T>
     }
 }
 
-impl<T: fmt::Display> fmt::Display for Signal<T>
+impl<T: fmt::Display + Clone> fmt::Display for Signal<T>
 {
     /// Samples the signal and formats the value.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
     {
-        self.sample_with(|val| fmt::Display::fmt(&*val, f))
+        fmt::Display::fmt(&self.sample(), f)
     }
 }
 
@@ -294,21 +265,21 @@ impl<T, S> SharedSignal<T> for SharedImpl<T, S, ()>
         self.storage.must_update()
     }
 
-    fn storage(&self) -> &Storage<T>
+    fn get_storage(&self) -> &Storage<T>
     {
         &self.storage
     }
 
-    fn sample(&self) -> Ref<'_, T>
+    fn sample(&self) -> &Storage<T>
     {
-        self.storage.borrow()
+        &self.storage
     }
 }
 
 // A signal that maps a parent shared signal.
 
 impl<T, P, F> SharedSignal<T> for SharedImpl<T, Rc<dyn SharedSignal<P>>, F>
-    where F: Fn(MaybeOwned<'_, P>) -> T + 'static
+    where F: Fn(MaybeOwned<'_, P>) -> T + 'static, P: Clone
 {
     fn update(&self)
     {
@@ -320,19 +291,19 @@ impl<T, P, F> SharedSignal<T> for SharedImpl<T, Rc<dyn SharedSignal<P>>, F>
         self.storage.must_update()
     }
 
-    fn storage(&self) -> &Storage<T>
+    fn get_storage(&self) -> &Storage<T>
     {
         &self.storage
     }
 
-    fn sample(&self) -> Ref<'_, T>
+    fn sample(&self) -> &Storage<T>
     {
         if self.has_changed()
         {
-            let res = (self.f)(MaybeOwned::Borrowed(&self.source.sample()));
+            let res = (self.f)(MaybeOwned::Owned(self.source.sample().get()));
             self.storage.set_local(res);
         }
-        self.storage.borrow()
+        &self.storage
     }
 }
 
@@ -356,48 +327,17 @@ impl<T, S, F> SharedSignal<T> for SharedImpl<T, mpsc::Receiver<S>, F>
         self.storage.must_update()
     }
 
-    fn storage(&self) -> &Storage<T>
+    fn get_storage(&self) -> &Storage<T>
     {
         &self.storage
     }
 
-    fn sample(&self) -> Ref<'_, T>
+    fn sample(&self) -> &Storage<T>
     {
         self.update();
         self.storage.inc_local();
-        self.storage.borrow()
+        &self.storage
     }
-}
-
-/// Helper for using `Signal::sample_with` with multiple signals.
-///
-/// Called as: `sample_with!(s1, s2, ...; f)` where:
-///
-/// - `s1: Signal<S1>, s2: Signal<S2>, ...` are N input signals
-/// - `f(MaybeOwned<S1>, MaybeOwned<S2>, ...) -> R` is a function that takes N arguments
-///
-/// or as: `sample_with!(s1, s2, ... => |v1, v2, ...| expr)` where:
-///
-/// - `v1: MaybeOwned<S1>, v2: MaybeOwned<S2>, ...` are N variable names
-/// - `expr` is an expresion using those variables
-#[macro_export]
-macro_rules! sample_with
-{
-    (@impl $f:expr ; ; $($var:ident)+) => ( $f($($var),+) );
-
-    (@impl $f:expr ; $sig:expr, $($tail:expr,)* ; $($var:ident)*) => (
-        $crate::Signal::sample_with(&$sig, |a| sample_with!(@impl $f; $($tail,)*; $($var)* a))
-    );
-
-    (@named ; ; $e:expr) => ($e);
-
-    (@named $sig:expr, $($stail:expr,)* ; $var:ident $($vtail:ident)* ; $e:expr) => (
-        $crate::Signal::sample_with(&$sig, |$var| sample_with!(@named $($stail,)*; $($vtail)*; $e))
-    );
-
-    ($($sig:expr),+ ; $f:expr) => ( sample_with!(@impl $f; $($sig,)+;) );
-
-    ($($sig:expr),+ => | $($var:ident),+ | $e:expr) => ( sample_with!(@named $($sig,)+; $($var)+; $e));
 }
 
 
@@ -418,7 +358,6 @@ mod tests
         assert_eq!(signal.sample(), 42);
         assert_eq!(double.sample(), 84);
         assert_eq!(plusone.sample(), 85);
-        signal.sample_with(|val| assert_eq!(*val, 42));
     }
 
     #[test]
@@ -441,7 +380,6 @@ mod tests
         let t = Instant::now();
         let signal = Signal::from_fn(move || t);
         assert_eq!(signal.sample(), t);
-        signal.sample_with(|val| assert_eq!(*val, t));
 
         let n = Rc::new(Cell::new(1));
         let cloned = n.clone();
@@ -455,21 +393,5 @@ mod tests
         assert_eq!(signal.sample(), 13);
         assert_eq!(double.sample(), 26);
         assert_eq!(plusone.sample(), 27);
-    }
-
-    #[test]
-    fn sample_with_macro()
-    {
-        let s1 = Signal::constant(30);
-        let s2 = Signal::from_fn(|| 12);
-        let s3 = Signal::from_storage(Rc::new(SharedImpl::new(45, ())));
-
-        let a = 55;
-        let res = sample_with!(s1, s2, s3 => |x, y, z| *x + *y + *z + a);
-        assert_eq!(res, 142);
-
-        let f = |a: MaybeOwned<'_, i32>, b: MaybeOwned<'_, i32>, c: MaybeOwned<'_, i32>| *a + *b + *c;
-        let res = sample_with!(s1, s2, s3; f);
-        assert_eq!(res, 87);
     }
 }

@@ -121,7 +121,7 @@ fn cloning()
     let accum = sink.stream().fold(Storage::new(), |a, v| a.push(*v));
 
     sink.feed(0..5);
-    accum.sample_with(|res| assert_eq!(res.0, [0, 1, 2, 3, 4]));
+    assert_eq!(accum.take().0, [0, 1, 2, 3, 4]);
 }
 
 #[test]
