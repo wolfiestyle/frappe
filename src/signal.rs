@@ -9,7 +9,7 @@ use self::SigValue::*;
 /// Represents a discrete value that changes over time.
 ///
 /// Signals are usually constructed by stream operations and can be read using the `sample` or
-/// `sample_with` methods. They update lazily when someone reads them.
+/// `take` methods. They update lazily when someone reads them.
 #[derive(Clone, Debug)]
 pub struct Signal<T>(SigValue<T>);
 
@@ -96,9 +96,9 @@ impl<T> Signal<T>
 
 impl<T: Clone> Signal<T>
 {
-    /// Sample by value.
+    /// Samples the value of the signal.
     ///
-    /// This will clone the content of the signal.
+    /// This will clone the value stored in the signal.
     pub fn sample(&self) -> T
     {
         match self.0
