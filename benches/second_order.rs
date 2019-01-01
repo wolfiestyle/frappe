@@ -16,12 +16,12 @@ use frappe::Sink;
 fn second_order(n_sinks: usize, n_steps: usize, b: &mut Bencher) {
     // Setup network
     let stepper = Sink::<usize>::new();
-    let sinks = (0..n_sinks)
-        .map(|_| Sink::<()>::new())
-        .collect::<Vec<_>>();
-    let counters = sinks.iter()
+    let sinks: Vec<_> = (0..n_sinks)
+        .map(|_| Sink::new())
+        .collect();
+    let counters: Vec<_> = sinks.iter()
         .map(|sink| sink.stream().fold(0, |n, _| n + 1))
-        .collect::<Vec<_>>();
+        .collect();
     let walker = {
         let counters = counters.clone();
         stepper.stream().map(move |k| counters[*k / 10].clone())
@@ -30,12 +30,16 @@ fn second_order(n_sinks: usize, n_steps: usize, b: &mut Bencher) {
 
     // Feed events
     let mut rng = rand::thread_rng();
-    b.iter(|| for i in 0..n_steps {
-        stepper.send(i);
-        for sink in sinks.choose_multiple(&mut rng, 10) {
-            sink.send(());
+    b.iter(|| {
+        let mut res = 0;
+        for i in 0..n_steps {
+            stepper.send(i);
+            for sink in sinks.choose_multiple(&mut rng, 10) {
+                sink.send(());
+            }
+            res += signal.sample();
         }
-        format!("{}", signal.sample());
+        res
     });
 }
 

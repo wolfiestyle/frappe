@@ -1,8 +1,8 @@
 //! FRP benchmarks from https://github.com/aepsil0n/carboxyl
 
 use rand::prelude::*;
-use bencher::{Bencher, benchmark_group, benchmark_main};
-use frappe::{Sink, Stream};
+use bencher::{Bencher, benchmark_group, benchmark_main, black_box};
+use frappe::Sink;
 
 /// First-order benchmark.
 ///
@@ -14,8 +14,8 @@ use frappe::{Sink, Stream};
 fn first_order(n_sinks: usize, n_steps: usize, b: &mut Bencher) {
     // Setup network
     let sinks: Vec<Sink<String>> = (0..n_sinks).map(|_| Sink::new()).collect();
-    let _printers: Vec<Stream<()>> = sinks.iter()
-        .map(|sink| sink.stream().map(|s| { format!("{}", s); }))
+    let _printers: Vec<_> = sinks.iter()
+        .map(|sink| sink.stream().map(|s| { black_box(format!("{}", s)); }))
         .collect();
 
     // Feed events
@@ -46,7 +46,7 @@ fn first_order_1k_ref(b: &mut Bencher) {
     let dist = rand::distributions::Uniform::new_inclusive(0, 1000);
     b.iter(|| for i in 0..1_000 {
         for _k in rng.sample_iter(&dist).take(10) {
-            format!("{}", i);
+            black_box(format!("{}", i));
         }
     });
 }
