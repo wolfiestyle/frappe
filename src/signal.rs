@@ -73,15 +73,22 @@ impl<T> Signal<T>
 
     /// Moves the value out of the signal.
     ///
-    /// This may leave the internal storage empty, so calling `sample` on other signals that
-    /// reference this storage will panic.
+    /// To avoid leaving the internal storage empty (and causing panics), it must be filled with
+    /// a default value. This marks the signal chain as changed, so most of time no one will
+    /// notice anything.
     pub fn take(self) -> T
+        where T: Default
     {
         match self.0
         {
             Constant(val) => val,
             Dynamic(f) => f(),
-            Shared(s) => { s.update(); s.sample().take() },
+            Shared(s) => {
+                s.update();
+                let val = s.sample().take();
+                s.get_storage().set(T::default());
+                val
+            }
             Nested(f) => f().take(),
         }
     }
@@ -393,5 +400,23 @@ mod tests
         assert_eq!(signal.sample(), 13);
         assert_eq!(double.sample(), 26);
         assert_eq!(plusone.sample(), 27);
+    }
+
+    #[test]
+    fn signal_take()
+    {
+        let signal = Signal::constant(42);
+        assert_eq!(signal.take(), 42);
+
+        let signal = Signal::from_fn(move || 33);
+        assert_eq!(signal.clone().take(), 33);
+        assert_eq!(signal.take(), 33);
+
+        let st = Rc::new(SharedImpl::new(123, ()));
+        let signal = Signal::from_storage(st.clone());
+        assert_eq!(signal.clone().take(), 123);
+        assert_eq!(signal.clone().take(), 0);
+        st.set(13);
+        assert_eq!(signal.take(), 13);
     }
 }

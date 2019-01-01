@@ -103,7 +103,7 @@ fn signal_switch()
 #[test]
 fn cloning()
 {
-    #[derive(Debug)]
+    #[derive(Debug, Default)]
     struct Storage<T>(Vec<T>);
 
     impl<T> Storage<T>
@@ -279,4 +279,22 @@ fn signal_chain()
     assert_eq!(sig_e.has_changed(), false);
     assert_eq!(sig_e.sample(), "(86).-");
     assert_eq!(eval_count.get(), 2);
+}
+
+#[test]
+fn signal_take()
+{
+    #[derive(Debug, Clone, PartialEq, Eq, Default)]
+    struct Value(i32);
+
+    let sink = Sink::new();
+
+    let sig = sink.stream()
+        .hold(Value(0))
+        .map(|v| Value(v.0 + 1));
+
+    sink.send(Value(41));
+
+    assert_eq!(sig.clone().take(), Value(42));
+    assert_eq!(sig.take(), Value(42));
 }
