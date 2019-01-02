@@ -1,17 +1,16 @@
-use std::rc::Rc;
-use std::cell::Cell;
-use std::sync::mpsc;
+use std::sync::{mpsc, Arc, Mutex};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::any::Any;
 use std::iter;
 use crate::types::{Callbacks, SumType2, MaybeOwned, SharedImpl};
-use crate::helpers::{rc_and_weak, with_weak};
+use crate::helpers::arc_and_weak;
 use crate::signal::Signal;
 
 /// A source of events that feeds the streams connected to it.
 #[derive(Debug)]
 pub struct Sink<T>
 {
-    cbs: Rc<Callbacks<T>>,
+    cbs: Arc<Callbacks<T>>,
 }
 
 impl<T> Sink<T>
@@ -94,15 +93,15 @@ impl<T> Clone for Sink<T>
 #[derive(Debug)]
 pub struct Stream<T>
 {
-    cbs: Rc<Callbacks<T>>,
-    source: Rc<dyn Any>,  // strong reference to a parent Stream
+    cbs: Arc<Callbacks<T>>,
+    source: Arc<dyn Any + Send + Sync>,  // strong reference to a parent Stream
 }
 
 impl<T> Stream<T>
 {
-    fn new<S: 'static>(cbs: Rc<Callbacks<T>>, source: S) -> Self
+    fn new<S: Send + Sync + 'static>(cbs: Arc<Callbacks<T>>, source: S) -> Self
     {
-        Stream{ cbs, source: Rc::new(source) }
+        Stream{ cbs, source: Arc::new(source) }
     }
 
     /// Creates a stream that never fires.
@@ -117,7 +116,7 @@ impl<T: 'static> Stream<T>
     /// Maps this stream into another stream using the provided function.
     #[inline]
     pub fn map<F, R>(&self, f: F) -> Stream<R>
-        where F: Fn(MaybeOwned<'_, T>) -> R + 'static,
+        where F: Fn(MaybeOwned<'_, T>) -> R + Send + Sync + 'static,
         R: 'static
     {
         self.filter_map(move |arg| Some(f(arg)))
@@ -125,23 +124,23 @@ impl<T: 'static> Stream<T>
 
     /// Creates a new stream that only contains the values where the predicate is `true`.
     pub fn filter<F>(&self, pred: F) -> Self
-        where F: Fn(&T) -> bool + 'static
+        where F: Fn(&T) -> bool + Send + Sync + 'static
     {
-        let (new_cbs, weak) = rc_and_weak(Callbacks::new());
+        let (new_cbs, weak) = arc_and_weak(Callbacks::new());
         self.cbs.push(move |arg| {
-            with_weak(&weak, |cb| if pred(&arg) { cb.call_dyn(arg) })
+            with_weak!(weak, |cb| if pred(&arg) { cb.call_dyn(arg) })
         });
         Stream::new(new_cbs, self.clone())
     }
 
     /// Filter and map a stream simultaneously.
     pub fn filter_map<F, R>(&self, f: F) -> Stream<R>
-        where F: Fn(MaybeOwned<'_, T>) -> Option<R> + 'static,
+        where F: Fn(MaybeOwned<'_, T>) -> Option<R> + Send + Sync + 'static,
         R: 'static
     {
-        let (new_cbs, weak) = rc_and_weak(Callbacks::new());
+        let (new_cbs, weak) = arc_and_weak(Callbacks::new());
         self.cbs.push(move |arg| {
-            with_weak(&weak, |cb| if let Some(val) = f(arg) { cb.call(val) })
+            with_weak!(weak, |cb| if let Some(val) = f(arg) { cb.call(val) })
         });
         Stream::new(new_cbs, self.clone())
     }
@@ -149,30 +148,30 @@ impl<T: 'static> Stream<T>
     /// Creates a new stream that fires with the events from both streams.
     pub fn merge(&self, other: &Stream<T>) -> Self
     {
-        let (new_cbs, weak1) = rc_and_weak(Callbacks::new());
+        let (new_cbs, weak1) = arc_and_weak(Callbacks::new());
         let weak2 = weak1.clone();
         self.cbs.push(move |arg| {
-            with_weak(&weak1, |cb| cb.call_dyn(arg))
+            with_weak!(weak1, |cb| cb.call_dyn(arg))
         });
         other.cbs.push(move |arg| {
-            with_weak(&weak2, |cb| cb.call_dyn(arg))
+            with_weak!(weak2, |cb| cb.call_dyn(arg))
         });
         Stream::new(new_cbs, (self.clone(), other.clone()))
     }
 
     /// Merges two streams of different types using two functions that return the same type.
     pub fn merge_with<U, F1, F2, R>(&self, other: &Stream<U>, f1: F1, f2: F2) -> Stream<R>
-        where F1: Fn(MaybeOwned<'_, T>) -> R + 'static,
-        F2: Fn(MaybeOwned<'_, U>) -> R + 'static,
+        where F1: Fn(MaybeOwned<'_, T>) -> R + Send + Sync + 'static,
+        F2: Fn(MaybeOwned<'_, U>) -> R + Send + Sync + 'static,
         U: 'static, R: 'static
     {
-        let (new_cbs, weak1) = rc_and_weak(Callbacks::new());
+        let (new_cbs, weak1) = arc_and_weak(Callbacks::new());
         let weak2 = weak1.clone();
         self.cbs.push(move |arg| {
-            with_weak(&weak1, |cb| cb.call(f1(arg)))
+            with_weak!(weak1, |cb| cb.call(f1(arg)))
         });
         other.cbs.push(move |arg| {
-            with_weak(&weak2, |cb| cb.call(f2(arg)))
+            with_weak!(weak2, |cb| cb.call(f2(arg)))
         });
         Stream::new(new_cbs, (self.clone(), other.clone()))
     }
@@ -185,12 +184,13 @@ impl<T: 'static> Stream<T>
     /// someone puts back a value on it.
     /// If this is undesirable, use `Stream::fold_clone` instead.
     pub fn fold<A, F>(&self, initial: A, f: F) -> Signal<A>
-        where F: Fn(A, MaybeOwned<'_, T>) -> A + 'static,
-        A: 'static
+        where F: Fn(A, MaybeOwned<'_, T>) -> A + Send + Sync + 'static,
+        A: Send + 'static
     {
-        let (storage, weak) = rc_and_weak(SharedImpl::new(initial, self.clone()));
+        let (storage, weak) = arc_and_weak(Mutex::new(SharedImpl::new(initial, self.clone())));
         self.cbs.push(move |arg| {
-            with_weak(&weak, |st| {
+            with_weak!(weak, |st_| {
+                let st = st_.lock().unwrap();
                 let old = st.take();
                 let new = f(old, arg);
                 st.set(new);
@@ -206,12 +206,13 @@ impl<T: 'static> Stream<T>
     /// storage will remain unchanged and later attempts at sampling will succeed like nothing
     /// happened.
     pub fn fold_clone<A, F>(&self, initial: A, f: F) -> Signal<A>
-        where F: Fn(A, MaybeOwned<'_, T>) -> A + 'static,
-        A: Clone + 'static
+        where F: Fn(A, MaybeOwned<'_, T>) -> A + Send + Sync + 'static,
+        A: Clone + Send + 'static
     {
-        let (storage, weak) = rc_and_weak(SharedImpl::new(initial, self.clone()));
+        let (storage, weak) = arc_and_weak(Mutex::new(SharedImpl::new(initial, self.clone())));
         self.cbs.push(move |arg| {
-            with_weak(&weak, |st| {
+            with_weak!(weak, |st_| {
+                let st = st_.lock().unwrap();
                 let old = st.get();
                 let new = f(old, arg);
                 st.set(new);
@@ -229,12 +230,12 @@ impl<T: 'static> Stream<T>
     /// This primitive is useful to construct asynchronous operations, since you can
     /// store the sink for later usage.
     pub fn map_n<F, R>(&self, f: F) -> Stream<R>
-        where F: Fn(MaybeOwned<'_, T>, Sink<R>) + 'static,
+        where F: Fn(MaybeOwned<'_, T>, Sink<R>) + Send + Sync + 'static,
         R: 'static
     {
-        let (new_cbs, weak) = rc_and_weak(Callbacks::new());
+        let (new_cbs, weak) = arc_and_weak(Callbacks::new());
         self.cbs.push(move |arg| {
-            with_weak(&weak, |cb| f(arg, Sink{ cbs: cb }))
+            with_weak!(weak, |cb| f(arg, Sink{ cbs: cb }))
         });
         Stream::new(new_cbs, self.clone())
     }
@@ -243,7 +244,7 @@ impl<T: 'static> Stream<T>
     ///
     /// This is meant to be used as a debugging tool and not to cause side effects.
     pub fn inspect<F>(self, f: F) -> Self
-        where F: Fn(MaybeOwned<'_, T>) + 'static
+        where F: Fn(MaybeOwned<'_, T>) + Send + Sync + 'static
     {
         self.cbs.push(move |arg| { f(arg); true });
         self
@@ -255,17 +256,19 @@ impl<T: Clone + 'static> Stream<T>
     /// Creates a Signal that holds the last value sent to this stream.
     #[inline]
     pub fn hold(&self, initial: T) -> Signal<T>
+        where T: Send
     {
         self.hold_if(initial, |_| true)
     }
 
     /// Holds the last value in this stream where the predicate is `true`.
     pub fn hold_if<F>(&self, initial: T, pred: F) -> Signal<T>
-        where F: Fn(&T) -> bool + 'static
+        where F: Fn(&T) -> bool + Send + Sync + 'static,
+        T: Send
     {
-        let (storage, weak) = rc_and_weak(SharedImpl::new(initial, self.clone()));
+        let (storage, weak) = arc_and_weak(Mutex::new(SharedImpl::new(initial, self.clone())));
         self.cbs.push(move |arg| {
-            with_weak(&weak, |st| if pred(&arg) { st.set(arg.into_owned()); })
+            with_weak!(weak, |st| if pred(&arg) { st.lock().unwrap().set(arg.into_owned()); })
         });
 
         Signal::from_storage(storage)
@@ -274,7 +277,7 @@ impl<T: Clone + 'static> Stream<T>
     /// Creates a collection from the values of this stream.
     #[inline]
     pub fn collect<C>(&self) -> Signal<C>
-        where C: Default + Extend<T> + 'static
+        where C: Default + Extend<T> + Send + 'static
     {
         self.fold(C::default(), |mut a, v| {
             a.extend(iter::once(v.into_owned()));
@@ -287,10 +290,13 @@ impl<T: Clone + 'static> Stream<T>
     /// This doesn't create a strong reference to the parent stream, so the channel sender will be dropped
     /// when the stream is deleted.
     pub fn as_channel(&self) -> mpsc::Receiver<T>
+        where T: Send
     {
         let (tx, rx) = mpsc::channel();
+        //FIXME: it should use one Sender instance per thread but idk how to do it
+        let tx_ = Mutex::new(tx);
         self.cbs.push(move |arg| {
-            tx.send(arg.into_owned()).is_ok()
+            tx_.lock().unwrap().send(arg.into_owned()).is_ok()
         });
         rx
     }
@@ -324,8 +330,8 @@ impl<T: SumType2 + Clone + 'static> Stream<T>
     /// Splits a two element sum type stream into two streams with the unwrapped values
     pub fn split(&self) -> (Stream<T::Type1>, Stream<T::Type2>)
     {
-        let (cbs_1, weak_1) = rc_and_weak(Callbacks::new());
-        let (cbs_2, weak_2) = rc_and_weak(Callbacks::new());
+        let (cbs_1, weak_1) = arc_and_weak(Callbacks::new());
+        let (cbs_2, weak_2) = arc_and_weak(Callbacks::new());
         self.cbs.push(move |result| {
             if result.is_type1()
             {
@@ -353,7 +359,7 @@ impl<T: SumType2 + Clone + 'static> Stream<T>
                 }
             }
         });
-        let source_rc = Rc::new(self.clone());
+        let source_rc = Arc::new(self.clone());
         let stream_1 = Stream{ cbs: cbs_1, source: source_rc.clone() };
         let stream_2 = Stream{ cbs: cbs_2, source: source_rc };
         (stream_1, stream_2)
@@ -365,19 +371,18 @@ impl<T: 'static> Stream<Stream<T>>
     /// Listens to the events from the last stream sent to a nested stream
     pub fn switch(&self) -> Stream<T>
     {
-        let (new_cbs, weak) = rc_and_weak(Callbacks::new());
-        let id = Rc::new(Cell::new(0usize));  // id of each stream sent
+        let (new_cbs, weak) = arc_and_weak(Callbacks::new());
+        let id = Arc::new(AtomicUsize::new(0));  // id of each stream sent
         self.cbs.push(move |stream| {
             if weak.upgrade().is_none() { return false }
             let cbs_w = weak.clone();
             let cur_id = id.clone();
             // increment the id so it will only send to the last stream
-            let my_id = id.get() + 1;
-            id.set(my_id);
+            let my_id = id.fetch_add(1, Ordering::SeqCst) + 1;
             // redirect the inner stream to the output stream
             stream.cbs.push(move |arg| {
-                if my_id != cur_id.get() { return false }
-                with_weak(&cbs_w, |cb| cb.call_dyn(arg))
+                if my_id != cur_id.load(Ordering::SeqCst) { return false }
+                with_weak!(cbs_w, |cb| cb.call_dyn(arg))
             });
             true
         });

@@ -5,7 +5,7 @@ pub use maybe_owned;
 #[cfg(feature="either")]
 pub use either;
 
-mod helpers;
+#[macro_use] mod helpers;
 pub mod types;
 mod stream;
 mod signal;

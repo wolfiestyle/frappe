@@ -1,9 +1,7 @@
 use frappe::Sink;
 use rand::Rng;
 
-use std::rc::Rc;
-use std::cell::RefCell;
-use std::sync::mpsc;
+use std::sync::{mpsc, Arc, RwLock, Mutex};
 use std::thread::{self, Thread};
 use std::time::Duration;
 
@@ -11,7 +9,7 @@ use std::time::Duration;
 #[derive(Clone)]
 struct Updater
 {
-    jobs: Rc<RefCell<Vec<Box<dyn Fn() -> bool>>>>,
+    jobs: Arc<RwLock<Vec<Box<dyn Fn() -> bool + Send + Sync>>>>,
     main_thread: Thread,
 }
 
@@ -27,15 +25,15 @@ impl Updater
 
     // adds a new job. it will run periodically until it returns true
     fn register<F>(&self, f: F)
-        where F: Fn() -> bool + 'static
+        where F: Fn() -> bool + Send + Sync + 'static
     {
-        self.jobs.borrow_mut().push(Box::new(f));
+        self.jobs.write().unwrap().push(Box::new(f));
     }
 
     // runs all current jobs
     fn update(&self)
     {
-        self.jobs.borrow_mut().retain(|f| !f());
+        self.jobs.write().unwrap().retain(|f| !f());
     }
 
     // waits until data is available
@@ -53,7 +51,7 @@ impl Updater
     // checks if there are pending jobs
     fn pending(&self) -> bool
     {
-        !self.jobs.borrow().is_empty()
+        !self.jobs.read().unwrap().is_empty()
     }
 }
 
@@ -77,7 +75,8 @@ fn main()
                 main_th.unpark(); // signal that there data is available
             });
             // store the sink and use it later to return the value when it's ready
-            upd.register(move || rx.try_recv().map(|v| sink_.send(v)).is_ok());
+            let rx_ = Mutex::new(rx);
+            upd.register(move || rx_.lock().unwrap().try_recv().map(|v| sink_.send(v)).is_ok());
         })
         // the rest of the chain continues on the main thread as normal
         .collect::<Vec<_>>();

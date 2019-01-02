@@ -1,5 +1,5 @@
 use frappe::{Sink, Stream, Signal, signal_lift};
-use std::rc::Rc;
+use std::sync::{Arc, RwLock};
 use std::fmt::Debug;
 
 #[test]
@@ -159,13 +159,11 @@ fn reentrant()
 #[test]
 fn deletion()
 {
-    use std::cell::Cell;
-
-    fn stream_cell(src: &Stream<i32>, i: i32) -> (Stream<i32>, Rc<Cell<i32>>)
+    fn stream_cell(src: &Stream<i32>, i: i32) -> (Stream<i32>, Arc<RwLock<i32>>)
     {
-        let cell = Rc::new(Cell::new(0));
+        let cell = Arc::new(RwLock::new(0));
         let cloned = cell.clone();
-        let stream = src.map(move |n| *n + i).inspect(move |n| cloned.set(*n));
+        let stream = src.map(move |n| *n + i).inspect(move |n| *cloned.write().unwrap() = *n);
         (stream, cell)
     }
 
@@ -176,15 +174,15 @@ fn deletion()
     let (s3, c3) = stream_cell(&stream, 3);
 
     sink.send(10);
-    assert_eq!(c1.get(), 11);
-    assert_eq!(c2.get(), 12);
-    assert_eq!(c3.get(), 13);
+    assert_eq!(*c1.read().unwrap(), 11);
+    assert_eq!(*c2.read().unwrap(), 12);
+    assert_eq!(*c3.read().unwrap(), 13);
 
     drop(s2);
     sink.send(20);
-    assert_eq!(c1.get(), 21);
-    assert_eq!(c2.get(), 12);
-    assert_eq!(c3.get(), 23);
+    assert_eq!(*c1.read().unwrap(), 21);
+    assert_eq!(*c2.read().unwrap(), 12);
+    assert_eq!(*c3.read().unwrap(), 23);
 }
 
 #[test]
@@ -254,14 +252,12 @@ fn stream_collect()
 #[test]
 fn signal_chain()
 {
-    use std::cell::Cell;
-
     let sink = Sink::new();
-    let eval_count = Rc::new(Cell::new(0));
+    let eval_count = Arc::new(RwLock::new(0));
     let ev = eval_count.clone();
 
     let sig_a = sink.stream().hold(0);
-    let sig_b = sig_a.map(move |a| { ev.set(ev.get() + 1); *a + 1 });
+    let sig_b = sig_a.map(move |a| { *ev.write().unwrap() += 1; *a + 1 });
     let sig_c = sig_b.map(|a| *a * 2);
     let sig_d = sig_c.map(|a| format!("({})", a));
     let sig_e = sig_d.map(|s| s.into_owned() + ".-");
@@ -270,7 +266,7 @@ fn signal_chain()
     assert_eq!(sig_e.sample(), "(2).-");
     assert_eq!(sig_e.has_changed(), false);
     assert_eq!(sig_e.sample(), "(2).-");
-    assert_eq!(eval_count.get(), 1);
+    assert_eq!(*eval_count.read().unwrap(), 1);
 
     sink.send(42);
 
@@ -278,7 +274,7 @@ fn signal_chain()
     assert_eq!(sig_e.sample(), "(86).-");
     assert_eq!(sig_e.has_changed(), false);
     assert_eq!(sig_e.sample(), "(86).-");
-    assert_eq!(eval_count.get(), 2);
+    assert_eq!(*eval_count.read().unwrap(), 2);
 }
 
 #[test]
@@ -297,4 +293,40 @@ fn signal_take()
 
     assert_eq!(sig.clone().take(), Value(42));
     assert_eq!(sig.take(), Value(42));
+}
+
+#[test]
+fn signal_threading()
+{
+    let sink = Sink::new();
+    let sig = sink.stream().hold(0);
+    sink.send(2);
+
+    let threads: Vec<_> = (0..6).map(|i| {
+        let sig_ = sig.clone();
+        std::thread::spawn(move || {
+            sig_.map(move |x| i32::pow(*x, i)).sample()
+        })
+    }).collect();
+
+    let result: Vec<_> = threads.into_iter().map(|th| th.join().unwrap()).collect();
+    assert_eq!(result, [1, 2, 4, 8, 16, 32]);
+}
+
+#[test]
+fn stream_threading()
+{
+    let sink = Sink::new();
+    let sig = sink.stream()
+        .map(|x| *x + 1)
+        .fold(1, |a, x| a * *x);
+
+    let threads: Vec<_> = (0..6).map(|i| {
+        let sink_ = sink.clone();
+        std::thread::spawn(move || sink_.send(i))
+    }).collect();
+
+    for th in threads { th.join().unwrap(); }
+
+    assert_eq!(sig.sample(), 720);
 }

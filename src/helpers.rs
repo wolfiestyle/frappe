@@ -1,14 +1,12 @@
-use std::rc::{Rc, Weak};
+use std::sync::{self as arc, Arc};
 
-pub fn rc_and_weak<T>(val: T) -> (Rc<T>, Weak<T>)
+pub fn arc_and_weak<T>(val: T) -> (Arc<T>, arc::Weak<T>)
 {
-    let rc = Rc::new(val);
-    let weak = Rc::downgrade(&rc);
+    let rc = Arc::new(val);
+    let weak = Arc::downgrade(&rc);
     (rc, weak)
 }
 
-pub fn with_weak<T, F>(weak: &Weak<T>, f: F) -> bool
-    where F: FnOnce(Rc<T>)
-{
-    weak.upgrade().map(f).is_some()
+macro_rules! with_weak {
+    ($weak:expr, $f:expr) => { $weak.upgrade().map($f).is_some() }
 }

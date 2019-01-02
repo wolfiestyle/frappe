@@ -1,7 +1,8 @@
 //! Miscellaneous types used by the library.
 
-use std::rc::Rc;
-use std::cell::{Cell, RefCell};
+use std::sync::{Arc, RwLock};
+use std::sync::atomic::{AtomicUsize, AtomicBool, Ordering};
+use std::cell::Cell;
 use std::{fmt, ops};
 
 pub use maybe_owned::MaybeOwned;
@@ -13,28 +14,31 @@ pub use either::Either;
 /// Callbacks use a MaybeOwned<T> argument so we can choose at runtime if we will send a ref or an owned value.
 struct FnCell<T>
 {
-    f: Box<dyn Fn(MaybeOwned<'_, T>) -> bool>,
-    alive: Cell<bool>,
+    f: Box<dyn Fn(MaybeOwned<'_, T>) -> bool + Send + Sync>,
+    alive: AtomicBool,
 }
 
 impl<T> FnCell<T>
 {
+    /// Creates a new `FnCell` from the supplied closure.
     fn new<F>(f: F) -> Self
-        where F: Fn(MaybeOwned<'_, T>) -> bool + 'static
+        where F: Fn(MaybeOwned<'_, T>) -> bool + Send + Sync + 'static
     {
-        FnCell{ f: Box::new(f), alive: Cell::new(true) }
+        FnCell{ f: Box::new(f), alive: AtomicBool::new(true) }
     }
 
+    /// Calls the stored function and updates it's callable status.
     fn call(&self, arg: MaybeOwned<'_, T>) -> bool
     {
-        let is_alive = self.alive.get() && (self.f)(arg);
-        self.alive.set(is_alive);
+        let is_alive = self.alive.load(Ordering::Acquire) && (self.f)(arg);
+        if !is_alive { self.alive.store(false, Ordering::Release); }
         is_alive
     }
 
+    /// Checks if this function can still be called.
     fn is_alive(&self) -> bool
     {
-        self.alive.get()
+        self.alive.load(Ordering::Relaxed)
     }
 }
 
@@ -42,7 +46,7 @@ impl<T> fmt::Debug for FnCell<T>
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
     {
-        write!(f, "FnCell {{ f: Fn@{:p}, alive: {} }}", self.f, self.alive.get())
+        write!(f, "FnCell {{ f: Fn@{:p}, alive: {:?} }}", self.f, self.alive)
     }
 }
 
@@ -50,20 +54,22 @@ impl<T> fmt::Debug for FnCell<T>
 #[derive(Debug)]
 pub(crate) struct Callbacks<T>
 {
-    fs: RefCell<Vec<FnCell<T>>>,
+    fs: RwLock<Vec<FnCell<T>>>,
 }
 
 impl<T> Callbacks<T>
 {
+    /// Creates an empty callback list.
     pub fn new() -> Self
     {
         Callbacks{ fs: Default::default() }
     }
 
+    /// Adds a new closure to the callback list.
     pub fn push<F>(&self, cb: F)
-        where F: Fn(MaybeOwned<'_, T>) -> bool + 'static
+        where F: Fn(MaybeOwned<'_, T>) -> bool + Send + Sync + 'static
     {
-        self.fs.borrow_mut().push(FnCell::new(cb))
+        self.fs.write().unwrap().push(FnCell::new(cb))
     }
 
     /// Sends an owned value.
@@ -71,30 +77,30 @@ impl<T> Callbacks<T>
     /// This sends a ref to the first N-1 callbacks, and the owned value to the last.
     pub fn call(&self, arg: T)
     {
-        let fs = self.fs.borrow();
+        let fs = self.fs.read().unwrap();
         let n = fs.len();
 
         let mut i = 0;
-        let mut n_dead = 0;
+        let mut all_alive = true;
         for _ in 1..n
         {
-            if !fs[i].call(MaybeOwned::Borrowed(&arg)) { n_dead += 1 }
+            all_alive &= fs[i].call(MaybeOwned::Borrowed(&arg));
             i += 1;
         }
-        if n > 0 && !fs[i].call(MaybeOwned::Owned(arg)) { n_dead += 1 }
+        if n > 0 { all_alive &= fs[i].call(MaybeOwned::Owned(arg)) }
         drop(fs);
 
-        if n_dead > 0 { self.cleanup(n_dead); }
+        if !all_alive { self.cleanup(); }
     }
 
     /// Sends a value by reference.
     pub fn call_ref(&self, arg: &T)
     {
-        let n_dead = self.fs.borrow().iter()
+        let all_alive = self.fs.read().unwrap().iter()
             .map(|f| f.call(MaybeOwned::Borrowed(arg)))
-            .fold(0, |a, alive| if alive { a } else { a + 1 });
+            .fold(true, |a, alive| a & alive);
 
-        if n_dead > 0 { self.cleanup(n_dead); }
+        if !all_alive { self.cleanup(); }
     }
 
     /// Sends a MaybeOwned value.
@@ -110,13 +116,12 @@ impl<T> Callbacks<T>
     }
 
     /// Removes the dead callbacks.
-    fn cleanup(&self, n_dead: usize)
+    fn cleanup(&self)
     {
-        if let Ok(mut fs) = self.fs.try_borrow_mut()
+        if let Ok(mut fs) = self.fs.try_write()
         {
             let mut i = 0;
-            let mut removed = 0;
-            while removed < n_dead && i < fs.len()
+            while i < fs.len()
             {
                 if fs[i].is_alive()
                 {
@@ -125,7 +130,6 @@ impl<T> Callbacks<T>
                 else
                 {
                     fs.swap_remove(i);
-                    removed += 1;
                 }
             }
         }
@@ -216,8 +220,8 @@ impl<L, R> SumType2 for ::either::Either<L, R>
 pub(crate) struct Storage<T>
 {
     val: Cell<Option<T>>,
-    serial: Cell<SerialId>,
-    pub root_ser: Rc<Cell<SerialId>>,
+    serial: SerialId,
+    pub root_ser: Arc<SerialId>,
 }
 
 const ERR_EMPTY: &str = "storage empty";
@@ -229,8 +233,8 @@ impl<T> Storage<T>
     {
         Storage{
             val: Cell::new(Some(val)),
-            serial: Cell::new(SERIAL_ONE),
-            root_ser: Rc::new(Cell::new(SERIAL_ONE)),
+            serial: SerialId::new(1),
+            root_ser: Arc::new(SerialId::new(1)),
         }
     }
 
@@ -289,7 +293,7 @@ impl<T> Storage<T>
     /// Increments the serial of a source signal, so child must update.
     pub fn inc_root(&self)
     {
-        self.root_ser.set(self.root_ser.get().inc());
+        self.root_ser.inc();
     }
 
     /// Marks this storage as updated.
@@ -306,23 +310,35 @@ impl<T> Default for Storage<T>
         Storage{
             val: Cell::new(None),
             serial: Default::default(),
-            root_ser: Rc::new(Cell::new(SERIAL_ONE)),
+            root_ser: Arc::new(SerialId::new(1)),
         }
     }
 }
 
 /// A counter on how many times a signal value has been modified.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
-pub(crate) struct SerialId(u64);
-
-/// The serial id of a constant value.
-const SERIAL_ONE: SerialId = SerialId(1);
+#[derive(Default)]
+pub(crate) struct SerialId(AtomicUsize);
 
 impl SerialId
 {
-    fn inc(self) -> Self
+    const fn new(val: usize) -> Self
     {
-        SerialId(self.0 + 1)
+        SerialId(AtomicUsize::new(val))
+    }
+
+    fn get(&self) -> usize
+    {
+        self.0.load(Ordering::SeqCst)
+    }
+
+    fn set(&self, val: usize)
+    {
+        self.0.store(val, Ordering::SeqCst);
+    }
+
+    fn inc(&self)
+    {
+        self.0.fetch_add(1, Ordering::SeqCst);
     }
 }
 
