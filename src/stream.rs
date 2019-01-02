@@ -185,15 +185,12 @@ impl<T: 'static> Stream<T>
     /// If this is undesirable, use `Stream::fold_clone` instead.
     pub fn fold<A, F>(&self, initial: A, f: F) -> Signal<A>
         where F: Fn(A, MaybeOwned<'_, T>) -> A + Send + Sync + 'static,
-        A: Send + 'static
+        A: Send + Sync + 'static
     {
-        let (storage, weak) = arc_and_weak(Mutex::new(SharedImpl::new(initial, self.clone())));
+        let (storage, weak) = arc_and_weak(SharedImpl::new(initial, self.clone()));
         self.cbs.push(move |arg| {
-            with_weak!(weak, |st_| {
-                let st = st_.lock().unwrap();
-                let old = st.take();
-                let new = f(old, arg);
-                st.set(new);
+            with_weak!(weak, |st| {
+                st.replace_with(|old| f(old, arg));
             })
         });
 
@@ -207,12 +204,11 @@ impl<T: 'static> Stream<T>
     /// happened.
     pub fn fold_clone<A, F>(&self, initial: A, f: F) -> Signal<A>
         where F: Fn(A, MaybeOwned<'_, T>) -> A + Send + Sync + 'static,
-        A: Clone + Send + 'static
+        A: Clone + Send + Sync + 'static
     {
-        let (storage, weak) = arc_and_weak(Mutex::new(SharedImpl::new(initial, self.clone())));
+        let (storage, weak) = arc_and_weak(SharedImpl::new(initial, self.clone()));
         self.cbs.push(move |arg| {
-            with_weak!(weak, |st_| {
-                let st = st_.lock().unwrap();
+            with_weak!(weak, |st| {
                 let old = st.get();
                 let new = f(old, arg);
                 st.set(new);
@@ -256,7 +252,7 @@ impl<T: Clone + 'static> Stream<T>
     /// Creates a Signal that holds the last value sent to this stream.
     #[inline]
     pub fn hold(&self, initial: T) -> Signal<T>
-        where T: Send
+        where T: Send + Sync
     {
         self.hold_if(initial, |_| true)
     }
@@ -264,11 +260,11 @@ impl<T: Clone + 'static> Stream<T>
     /// Holds the last value in this stream where the predicate is `true`.
     pub fn hold_if<F>(&self, initial: T, pred: F) -> Signal<T>
         where F: Fn(&T) -> bool + Send + Sync + 'static,
-        T: Send
+        T: Send + Sync
     {
-        let (storage, weak) = arc_and_weak(Mutex::new(SharedImpl::new(initial, self.clone())));
+        let (storage, weak) = arc_and_weak(SharedImpl::new(initial, self.clone()));
         self.cbs.push(move |arg| {
-            with_weak!(weak, |st| if pred(&arg) { st.lock().unwrap().set(arg.into_owned()); })
+            with_weak!(weak, |st| if pred(&arg) { st.set(arg.into_owned()); })
         });
 
         Signal::from_storage(storage)
@@ -277,7 +273,7 @@ impl<T: Clone + 'static> Stream<T>
     /// Creates a collection from the values of this stream.
     #[inline]
     pub fn collect<C>(&self) -> Signal<C>
-        where C: Default + Extend<T> + Send + 'static
+        where C: Default + Extend<T> + Send + Sync + 'static
     {
         self.fold(C::default(), |mut a, v| {
             a.extend(iter::once(v.into_owned()));

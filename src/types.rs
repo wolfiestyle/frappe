@@ -2,7 +2,6 @@
 
 use std::sync::{Arc, RwLock};
 use std::sync::atomic::{AtomicUsize, AtomicBool, Ordering};
-use std::cell::Cell;
 use std::{fmt, ops};
 
 pub use maybe_owned::MaybeOwned;
@@ -219,7 +218,7 @@ impl<L, R> SumType2 for ::either::Either<L, R>
 /// Storage cell for shared signal values.
 pub(crate) struct Storage<T>
 {
-    val: Cell<Option<T>>,
+    val: RwLock<Option<T>>,
     serial: SerialId,
     pub root_ser: Arc<SerialId>,
 }
@@ -232,7 +231,7 @@ impl<T> Storage<T>
     pub fn new(val: T) -> Self
     {
         Storage{
-            val: Cell::new(Some(val)),
+            val: RwLock::new(Some(val)),
             serial: SerialId::new(1),
             root_ser: Arc::new(SerialId::new(1)),
         }
@@ -242,7 +241,7 @@ impl<T> Storage<T>
     pub fn inherit<P>(parent: &Storage<P>) -> Self
     {
         Storage{
-            val: Cell::new(None),
+            val: RwLock::new(None),
             serial: Default::default(),
             root_ser: parent.root_ser.clone(),
         }
@@ -252,10 +251,7 @@ impl<T> Storage<T>
     pub fn get(&self) -> T
         where T: Clone
     {
-        let val = self.val.replace(None);
-        let cloned = val.clone();
-        self.val.set(val);
-        cloned.expect(ERR_EMPTY)
+        self.val.read().unwrap().clone().expect(ERR_EMPTY)
     }
 
     /// Sets value and increments the root serial.
@@ -263,7 +259,8 @@ impl<T> Storage<T>
     /// This is called by source signals.
     pub fn set(&self, val: T)
     {
-        self.val.set(Some(val));
+        let mut st = self.val.write().unwrap();
+        *st = Some(val);
         self.inc_root();
     }
 
@@ -272,16 +269,29 @@ impl<T> Storage<T>
     /// This is called by mapped (child) signals.
     pub fn set_local(&self, val: T)
     {
-        self.val.set(Some(val));
+        let mut st = self.val.write().unwrap();
+        *st = Some(val);
         self.inc_local();
     }
 
-    /// Moves the value out and sets the storage empty.
-    ///
-    /// This needs to be paired with a .set() afterwards.
-    pub fn take(&self) -> T
+    /// Replaces the stored value.
+    pub fn replace(&self, val: T) -> T
     {
-        self.val.replace(None).expect(ERR_EMPTY)
+        let mut st = self.val.write().unwrap();
+        let old = st.take().expect(ERR_EMPTY);
+        *st = Some(val);
+        self.inc_root();
+        old
+    }
+
+    /// Passes the stored value through a function.
+    pub fn replace_with<F>(&self, f: F)
+        where F: FnOnce(T) -> T
+    {
+        let mut st = self.val.write().unwrap();
+        let old = st.take().expect(ERR_EMPTY);
+        *st = Some(f(old));
+        self.inc_root();
     }
 
     /// Checks if a parent storage has changed, so this needs update.
@@ -308,7 +318,7 @@ impl<T> Default for Storage<T>
     fn default() -> Self
     {
         Storage{
-            val: Cell::new(None),
+            val: RwLock::new(None),
             serial: Default::default(),
             root_ser: Arc::new(SerialId::new(1)),
         }
@@ -328,17 +338,17 @@ impl SerialId
 
     fn get(&self) -> usize
     {
-        self.0.load(Ordering::SeqCst)
+        self.0.load(Ordering::Relaxed)
     }
 
     fn set(&self, val: usize)
     {
-        self.0.store(val, Ordering::SeqCst);
+        self.0.store(val, Ordering::Relaxed);
     }
 
     fn inc(&self)
     {
-        self.0.fetch_add(1, Ordering::SeqCst);
+        self.0.fetch_add(1, Ordering::Relaxed);
     }
 }
 
