@@ -220,8 +220,8 @@ impl<L, R> SumType2 for ::either::Either<L, R>
 pub(crate) struct Storage<T>
 {
     val: RwLock<Option<T>>,
-    serial: SerialId,
-    pub root_ser: Arc<SerialId>,
+    serial: AtomicUsize,
+    root_ser: Arc<AtomicUsize>,
 }
 
 const ERR_EMPTY: &str = "storage empty";
@@ -233,8 +233,8 @@ impl<T> Storage<T>
     {
         Storage{
             val: RwLock::new(Some(val)),
-            serial: SerialId::new(1),
-            root_ser: Arc::new(SerialId::new(1)),
+            serial: AtomicUsize::new(1),
+            root_ser: Arc::new(AtomicUsize::new(1)),
         }
     }
 
@@ -298,19 +298,19 @@ impl<T> Storage<T>
     /// Checks if a parent storage has changed, so this needs update.
     pub fn must_update(&self) -> bool
     {
-        self.root_ser.get() > self.serial.get()
+        self.root_ser.load(Ordering::Relaxed) > self.serial.load(Ordering::Relaxed)
     }
 
     /// Increments the serial of a source signal, so child must update.
     pub fn inc_root(&self)
     {
-        self.root_ser.inc();
+        self.root_ser.fetch_add(1, Ordering::Relaxed);
     }
 
     /// Marks this storage as updated.
     pub fn inc_local(&self)
     {
-        self.serial.set(self.root_ser.get());
+        self.serial.store(self.root_ser.load(Ordering::Relaxed), Ordering::Relaxed);
     }
 }
 
@@ -319,37 +319,10 @@ impl<T> Default for Storage<T>
     fn default() -> Self
     {
         Storage{
-            val: RwLock::new(None),
+            val: Default::default(),
             serial: Default::default(),
-            root_ser: Arc::new(SerialId::new(1)),
+            root_ser: Arc::new(AtomicUsize::new(1)),
         }
-    }
-}
-
-/// A counter on how many times a signal value has been modified.
-#[derive(Default)]
-pub(crate) struct SerialId(AtomicUsize);
-
-impl SerialId
-{
-    const fn new(val: usize) -> Self
-    {
-        SerialId(AtomicUsize::new(val))
-    }
-
-    fn get(&self) -> usize
-    {
-        self.0.load(Ordering::Relaxed)
-    }
-
-    fn set(&self, val: usize)
-    {
-        self.0.store(val, Ordering::Relaxed);
-    }
-
-    fn inc(&self)
-    {
-        self.0.fetch_add(1, Ordering::Relaxed);
     }
 }
 
