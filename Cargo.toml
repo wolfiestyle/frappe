@@ -15,6 +15,7 @@ edition = "2018"
 [dependencies]
 maybe-owned = ">= 0.3.0"
 either = { version = "1.1.0", optional = true }
+parking_lot = "0.7.1"
 
 [dev-dependencies]
 rand = "0.6.1"

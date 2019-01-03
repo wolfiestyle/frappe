@@ -1,8 +1,9 @@
 //! Miscellaneous types used by the library.
 
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, AtomicBool, Ordering};
 use std::{fmt, ops};
+use parking_lot::RwLock;
 
 pub use maybe_owned::MaybeOwned;
 #[cfg(feature="either")]
@@ -68,7 +69,7 @@ impl<T> Callbacks<T>
     pub fn push<F>(&self, cb: F)
         where F: Fn(MaybeOwned<'_, T>) -> bool + Send + Sync + 'static
     {
-        self.fs.write().unwrap().push(FnCell::new(cb))
+        self.fs.write().push(FnCell::new(cb))
     }
 
     /// Sends an owned value.
@@ -76,7 +77,7 @@ impl<T> Callbacks<T>
     /// This sends a ref to the first N-1 callbacks, and the owned value to the last.
     pub fn call(&self, arg: T)
     {
-        let fs = self.fs.read().unwrap();
+        let fs = self.fs.read();
         let n = fs.len();
 
         let mut i = 0;
@@ -95,7 +96,7 @@ impl<T> Callbacks<T>
     /// Sends a value by reference.
     pub fn call_ref(&self, arg: &T)
     {
-        let all_alive = self.fs.read().unwrap().iter()
+        let all_alive = self.fs.read().iter()
             .map(|f| f.call(MaybeOwned::Borrowed(arg)))
             .fold(true, |a, alive| a & alive);
 
@@ -117,7 +118,7 @@ impl<T> Callbacks<T>
     /// Removes the dead callbacks.
     fn cleanup(&self)
     {
-        if let Ok(mut fs) = self.fs.try_write()
+        if let Some(mut fs) = self.fs.try_write()
         {
             let mut i = 0;
             while i < fs.len()
@@ -251,7 +252,7 @@ impl<T> Storage<T>
     pub fn get(&self) -> T
         where T: Clone
     {
-        self.val.read().unwrap().clone().expect(ERR_EMPTY)
+        self.val.read().clone().expect(ERR_EMPTY)
     }
 
     /// Sets value and increments the root serial.
@@ -259,7 +260,7 @@ impl<T> Storage<T>
     /// This is called by source signals.
     pub fn set(&self, val: T)
     {
-        let mut st = self.val.write().unwrap();
+        let mut st = self.val.write();
         *st = Some(val);
         self.inc_root();
     }
@@ -269,7 +270,7 @@ impl<T> Storage<T>
     /// This is called by mapped (child) signals.
     pub fn set_local(&self, val: T)
     {
-        let mut st = self.val.write().unwrap();
+        let mut st = self.val.write();
         *st = Some(val);
         self.inc_local();
     }
@@ -277,7 +278,7 @@ impl<T> Storage<T>
     /// Replaces the stored value.
     pub fn replace(&self, val: T) -> T
     {
-        let mut st = self.val.write().unwrap();
+        let mut st = self.val.write();
         let old = st.take().expect(ERR_EMPTY);
         *st = Some(val);
         self.inc_root();
@@ -288,7 +289,7 @@ impl<T> Storage<T>
     pub fn replace_with<F>(&self, f: F)
         where F: FnOnce(T) -> T
     {
-        let mut st = self.val.write().unwrap();
+        let mut st = self.val.write();
         let old = st.take().expect(ERR_EMPTY);
         *st = Some(f(old));
         self.inc_root();

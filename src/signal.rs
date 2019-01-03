@@ -1,5 +1,6 @@
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{mpsc, Arc};
 use std::fmt;
+use parking_lot::Mutex;
 use crate::types::{MaybeOwned, Storage, SharedSignal, SharedImpl};
 use crate::stream::Stream;
 
@@ -329,7 +330,7 @@ impl<T, S, F> SharedSignal<T> for SharedImpl<T, Mutex<mpsc::Receiver<S>>, F>
 {
     fn update(&self)
     {
-        let source = self.source.lock().unwrap();
+        let source = self.source.lock();
         if let Ok(first) = source.try_recv()
         {
             self.storage.replace_with(|old| {

@@ -1,7 +1,8 @@
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{mpsc, Arc};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::any::Any;
 use std::iter;
+use parking_lot::Mutex;
 use crate::types::{Callbacks, SumType2, MaybeOwned, SharedImpl};
 use crate::helpers::arc_and_weak;
 use crate::signal::Signal;
@@ -292,7 +293,7 @@ impl<T: Clone + 'static> Stream<T>
         //FIXME: it should use one Sender instance per thread but idk how to do it
         let tx_ = Mutex::new(tx);
         self.cbs.push(move |arg| {
-            tx_.lock().unwrap().send(arg.into_owned()).is_ok()
+            tx_.lock().send(arg.into_owned()).is_ok()
         });
         rx
     }
