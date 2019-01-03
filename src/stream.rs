@@ -186,7 +186,7 @@ impl<T: 'static> Stream<T>
     /// If this is undesirable, use `Stream::fold_clone` instead.
     pub fn fold<A, F>(&self, initial: A, f: F) -> Signal<A>
         where F: Fn(A, MaybeOwned<'_, T>) -> A + Send + Sync + 'static,
-        A: Send + Sync + 'static
+        A: Send + 'static
     {
         let (storage, weak) = arc_and_weak(SharedImpl::new(initial, self.clone()));
         self.cbs.push(move |arg| {
@@ -205,7 +205,7 @@ impl<T: 'static> Stream<T>
     /// happened.
     pub fn fold_clone<A, F>(&self, initial: A, f: F) -> Signal<A>
         where F: Fn(A, MaybeOwned<'_, T>) -> A + Send + Sync + 'static,
-        A: Clone + Send + Sync + 'static
+        A: Clone + Send + 'static
     {
         let (storage, weak) = arc_and_weak(SharedImpl::new(initial, self.clone()));
         self.cbs.push(move |arg| {
@@ -253,7 +253,7 @@ impl<T: Clone + 'static> Stream<T>
     /// Creates a Signal that holds the last value sent to this stream.
     #[inline]
     pub fn hold(&self, initial: T) -> Signal<T>
-        where T: Send + Sync
+        where T: Send
     {
         self.hold_if(initial, |_| true)
     }
@@ -261,7 +261,7 @@ impl<T: Clone + 'static> Stream<T>
     /// Holds the last value in this stream where the predicate is `true`.
     pub fn hold_if<F>(&self, initial: T, pred: F) -> Signal<T>
         where F: Fn(&T) -> bool + Send + Sync + 'static,
-        T: Send + Sync
+        T: Send
     {
         let (storage, weak) = arc_and_weak(SharedImpl::new(initial, self.clone()));
         self.cbs.push(move |arg| {
@@ -274,7 +274,7 @@ impl<T: Clone + 'static> Stream<T>
     /// Creates a collection from the values of this stream.
     #[inline]
     pub fn collect<C>(&self) -> Signal<C>
-        where C: Default + Extend<T> + Send + Sync + 'static
+        where C: Default + Extend<T> + Send + 'static
     {
         self.fold(C::default(), |mut a, v| {
             a.extend(iter::once(v.into_owned()));

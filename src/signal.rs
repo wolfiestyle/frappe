@@ -122,12 +122,17 @@ impl<T: 'static> Signal<T>
     /// The closure is called only when the parent signal changes.
     pub fn map<F, R>(&self, f: F) -> Signal<R>
         where F: Fn(MaybeOwned<'_, T>) -> R + Send + Sync + 'static,
-        T: Clone + Send + Sync, R: Send + Sync + 'static
+        T: Clone + Send, R: Send + 'static
     {
         match self.0 {
             // constant signal: apply f once to produce another constant signal
             Constant(ref val) => {
                 Signal::constant(f(MaybeOwned::Borrowed(val)))
+            }
+            // dynamic signal: sample and apply f
+            Dynamic(ref sf) => {
+                let sf_ = sf.clone();
+                Signal::from_fn(move || f(MaybeOwned::Owned(sf_())))
             }
             // shared signal: apply f only when the parent signal has changed
             Shared(ref sig) => Signal::shared(SharedImpl{
@@ -135,10 +140,10 @@ impl<T: 'static> Signal<T>
                 source: sig.clone(),
                 f,
             }),
-            // dynamic/nested signal: apply f unconditionally
-            Dynamic(_) | Nested(_) => {
-                let this = self.clone();
-                Signal::from_fn(move || f(MaybeOwned::Owned(this.sample())))
+            // nested signal: extract signal, sample and apply f
+            Nested(ref sf) => {
+                let sf_ = sf.clone();
+                Signal::from_fn(move || f(MaybeOwned::Owned(sf_().sample())))
             }
         }
     }
@@ -146,15 +151,15 @@ impl<T: 'static> Signal<T>
     /// Samples the value of this signal every time the trigger stream fires.
     pub fn snapshot<S, F, R>(&self, trigger: &Stream<S>, f: F) -> Stream<R>
         where F: Fn(MaybeOwned<'_, T>, MaybeOwned<'_, S>) -> R + Send + Sync + 'static,
-        T: Clone + Send + Sync, S: 'static, R: 'static
+        T: Clone + Send, S: 'static, R: 'static
     {
-        let this = self.clone();
-        trigger.map(move |b| f(MaybeOwned::Owned(this.sample()), b))
+        let this = Mutex::new(self.clone());  // need Sync for T
+        trigger.map(move |b| f(MaybeOwned::Owned(this.lock().sample()), b))
     }
 
     /// Creates a signal from a shared value.
     pub(crate) fn from_storage<P: Send + Sync + 'static>(storage: Arc<SharedImpl<T, P, ()>>) -> Self
-        where T: Send + Sync
+        where T: Send
     {
         Signal(Shared(storage))
     }
@@ -165,7 +170,7 @@ impl<T: 'static> Signal<T>
     /// (using non-blocking operations) and returns the last value seen.
     #[inline]
     pub fn from_channel(initial: T, rx: mpsc::Receiver<T>) -> Self
-        where T: Send + Sync
+        where T: Send
     {
         Self::fold_channel(initial, rx, |_, v| v)
     }
@@ -177,7 +182,7 @@ impl<T: 'static> Signal<T>
     /// initial accumulator state.
     pub fn fold_channel<V, F>(initial: T, rx: mpsc::Receiver<V>, f: F) -> Self
         where F: Fn(T, V) -> T + Send + Sync + 'static,
-        T: Send + Sync, V: Send + 'static
+        T: Send, V: Send + 'static
     {
         Signal::shared(SharedImpl{
             storage: Storage::new(initial),

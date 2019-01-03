@@ -3,7 +3,7 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, AtomicBool, Ordering};
 use std::{fmt, ops};
-use parking_lot::RwLock;
+use parking_lot::{RwLock, Mutex};
 
 pub use maybe_owned::MaybeOwned;
 #[cfg(feature="either")]
@@ -219,7 +219,7 @@ impl<L, R> SumType2 for ::either::Either<L, R>
 /// Storage cell for shared signal values.
 pub(crate) struct Storage<T>
 {
-    val: RwLock<Option<T>>,
+    val: Mutex<Option<T>>,
     serial: AtomicUsize,
     root_ser: Arc<AtomicUsize>,
 }
@@ -232,7 +232,7 @@ impl<T> Storage<T>
     pub fn new(val: T) -> Self
     {
         Storage{
-            val: RwLock::new(Some(val)),
+            val: Mutex::new(Some(val)),
             serial: AtomicUsize::new(1),
             root_ser: Arc::new(AtomicUsize::new(1)),
         }
@@ -242,7 +242,7 @@ impl<T> Storage<T>
     pub fn inherit<P>(parent: &Storage<P>) -> Self
     {
         Storage{
-            val: RwLock::new(None),
+            val: Default::default(),
             serial: Default::default(),
             root_ser: parent.root_ser.clone(),
         }
@@ -252,7 +252,7 @@ impl<T> Storage<T>
     pub fn get(&self) -> T
         where T: Clone
     {
-        self.val.read().clone().expect(ERR_EMPTY)
+        self.val.lock().clone().expect(ERR_EMPTY)
     }
 
     /// Sets value and increments the root serial.
@@ -260,7 +260,7 @@ impl<T> Storage<T>
     /// This is called by source signals.
     pub fn set(&self, val: T)
     {
-        let mut st = self.val.write();
+        let mut st = self.val.lock();
         *st = Some(val);
         self.inc_root();
     }
@@ -270,7 +270,7 @@ impl<T> Storage<T>
     /// This is called by mapped (child) signals.
     pub fn set_local(&self, val: T)
     {
-        let mut st = self.val.write();
+        let mut st = self.val.lock();
         *st = Some(val);
         self.inc_local();
     }
@@ -278,7 +278,7 @@ impl<T> Storage<T>
     /// Replaces the stored value.
     pub fn replace(&self, val: T) -> T
     {
-        let mut st = self.val.write();
+        let mut st = self.val.lock();
         let old = st.take().expect(ERR_EMPTY);
         *st = Some(val);
         self.inc_root();
@@ -289,7 +289,7 @@ impl<T> Storage<T>
     pub fn replace_with<F>(&self, f: F)
         where F: FnOnce(T) -> T
     {
-        let mut st = self.val.write();
+        let mut st = self.val.lock();
         let old = st.take().expect(ERR_EMPTY);
         *st = Some(f(old));
         self.inc_root();
