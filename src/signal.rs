@@ -115,17 +115,17 @@ impl<T> Signal<T> {
     /// The closure is called only when the parent signal changes.
     pub fn map<F, R>(&self, f: F) -> Signal<R>
     where
-        F: Fn(MaybeOwned<'_, T>) -> R + Send + Sync + 'static,
+        F: Fn(T) -> R + Send + Sync + 'static,
         T: Clone + 'static,
         R: Send + 'static,
     {
         match self.0 {
             // constant signal: apply f once to produce another constant signal
-            Constant(ref val) => Signal::constant(f(MaybeOwned::Borrowed(val))),
+            Constant(ref val) => Signal::constant(f(val.clone())),
             // dynamic signal: sample and apply f
             Dynamic(ref sf) => {
                 let sf_ = sf.clone();
-                Signal::from_fn(move || f(MaybeOwned::Owned(sf_())))
+                Signal::from_fn(move || f(sf_()))
             }
             // shared signal: apply f only when the parent signal has changed
             Shared(ref sig) => Signal::shared(SharedImpl {
@@ -136,7 +136,7 @@ impl<T> Signal<T> {
             // nested signal: extract signal, sample and apply f
             Nested(ref sf) => {
                 let sf_ = sf.clone();
-                Signal::from_fn(move || f(MaybeOwned::Owned(sf_().sample())))
+                Signal::from_fn(move || f(sf_().sample()))
             }
         }
     }
@@ -146,13 +146,13 @@ impl<T: Send + 'static> Signal<T> {
     /// Samples the value of this signal every time the trigger stream fires.
     pub fn snapshot<S, F, R>(&self, trigger: &Stream<S>, f: F) -> Stream<R>
     where
-        F: Fn(MaybeOwned<'_, T>, MaybeOwned<'_, S>) -> R + Send + Sync + 'static,
+        F: Fn(T, MaybeOwned<'_, S>) -> R + Send + Sync + 'static,
         T: Clone,
         S: 'static,
         R: 'static,
     {
         let this = Mutex::new(self.clone()); // need Sync for T
-        trigger.map(move |b| f(MaybeOwned::Owned(this.lock().sample()), b))
+        trigger.map(move |b| f(this.lock().sample(), b))
     }
 
     /// Creates a signal from a shared value.
@@ -257,8 +257,8 @@ mod tests {
     #[test]
     fn signal_basic() {
         let signal = Signal::constant(42);
-        let double = signal.map(|a| *a * 2);
-        let plusone = double.map(|a| *a + 1);
+        let double = signal.map(|a| a * 2);
+        let plusone = double.map(|a| a + 1);
         assert_eq!(signal.sample(), 42);
         assert_eq!(double.sample(), 84);
         assert_eq!(plusone.sample(), 85);
@@ -268,7 +268,7 @@ mod tests {
     fn signal_shared() {
         let st = Arc::new(SharedImpl::new(1, ()));
         let signal = Signal::from_storage(st.clone());
-        let double = signal.map(|a| *a * 2);
+        let double = signal.map(|a| a * 2);
 
         assert_eq!(signal.sample(), 1);
         assert_eq!(double.sample(), 2);
@@ -286,8 +286,8 @@ mod tests {
         let n = Arc::new(RwLock::new(1));
         let cloned = n.clone();
         let signal = Signal::from_fn(move || *cloned.read().unwrap());
-        let double = signal.map(|a| *a * 2);
-        let plusone = double.map(|a| *a + 1);
+        let double = signal.map(|a| a * 2);
+        let plusone = double.map(|a| a + 1);
         assert_eq!(signal.sample(), 1);
         assert_eq!(double.sample(), 2);
         assert_eq!(plusone.sample(), 3);

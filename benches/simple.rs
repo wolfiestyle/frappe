@@ -11,7 +11,7 @@ fn make_chain() -> (Sink<i32>, Signal<i32>) {
         .filter(|&x| x < 4)
         .merge(&sink.stream().map(|x| *x * 5))
         .hold(15)
-        .map(|x| *x + 1);
+        .map(|x| x + 1);
     (sink, sig)
 }
 

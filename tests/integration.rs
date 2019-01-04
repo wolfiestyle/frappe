@@ -20,7 +20,7 @@ fn stream_operations() {
     let s_merged = pos.merge(&neg.map(|a| -*a)).collect::<Vec<_>>();
     let s_accum = stream
         .collect::<Vec<_>>()
-        .snapshot(&stream, |s, _| s.into_owned())
+        .snapshot(&stream, |s, _| s)
         .collect::<Vec<_>>();
     let s_cloned = stream.fold_clone(vec![], |mut a, v| {
         a.push(v.into_owned());
@@ -106,7 +106,7 @@ fn stream_channel() {
 fn signal_switch() {
     let signal_sink = Sink::new();
     let switched = signal_sink.stream().hold(Default::default()).switch();
-    let double = switched.map(|a| *a * 2);
+    let double = switched.map(|a| a * 2);
 
     signal_sink.send(Signal::constant(1));
     assert_eq!(switched.sample(), 1);
@@ -232,7 +232,7 @@ fn map_n() {
 #[test]
 fn lift() {
     let sink1 = Sink::new();
-    let res = signal_lift!(|a| *a + 1, sink1.stream().hold(0));
+    let res = signal_lift!(|a| a + 1, sink1.stream().hold(0));
 
     assert_eq!(res.sample(), 1);
     sink1.send(12);
@@ -294,11 +294,11 @@ fn signal_chain() {
     let sig_a = sink.stream().hold(0);
     let sig_b = sig_a.map(move |a| {
         *ev.write().unwrap() += 1;
-        *a + 1
+        a + 1
     });
-    let sig_c = sig_b.map(|a| *a * 2);
+    let sig_c = sig_b.map(|a| a * 2);
     let sig_d = sig_c.map(|a| format!("({})", a));
-    let sig_e = sig_d.map(|s| s.into_owned() + ".-");
+    let sig_e = sig_d.map(|s| s + ".-");
 
     assert_eq!(sig_e.has_changed(), true);
     assert_eq!(sig_e.sample(), "(2).-");
@@ -339,7 +339,7 @@ fn signal_threading() {
     let threads: Vec<_> = (0..6)
         .map(|i| {
             let sig_ = sig.clone();
-            std::thread::spawn(move || sig_.map(move |x| i32::pow(*x, i)).sample())
+            std::thread::spawn(move || sig_.map(move |x: i32| x.pow(i)).sample())
         })
         .collect();
 

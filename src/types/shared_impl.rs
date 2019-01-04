@@ -1,4 +1,4 @@
-use crate::types::{MaybeOwned, SharedSignal, Storage};
+use crate::types::{SharedSignal, Storage};
 use parking_lot::Mutex;
 use std::ops;
 use std::sync::{mpsc, Arc};
@@ -46,7 +46,7 @@ impl<T, S> SharedSignal<T> for SharedImpl<T, S, ()> {
 
 impl<T, P, F> SharedSignal<T> for SharedImpl<T, Arc<dyn SharedSignal<P> + Send + Sync>, F>
 where
-    F: Fn(MaybeOwned<'_, P>) -> T + 'static,
+    F: Fn(P) -> T + 'static,
     P: Clone,
 {
     fn update(&self) {
@@ -59,7 +59,7 @@ where
 
     fn sample(&self) -> &Storage<T> {
         if self.storage.must_update() {
-            let res = (self.f)(MaybeOwned::Owned(self.source.sample().get()));
+            let res = (self.f)(self.source.sample().get());
             self.storage.set_local(res);
         }
         &self.storage
