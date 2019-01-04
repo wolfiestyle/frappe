@@ -104,6 +104,20 @@ impl<T> Stream<T> {
     pub fn never() -> Self {
         Stream::new(Default::default(), ())
     }
+
+    /// Reads the values without modifying them.
+    ///
+    /// This is meant to be used as a debugging tool, not to cause side effects.
+    pub fn inspect<F>(self, f: F) -> Self
+    where
+        F: Fn(MaybeOwned<'_, T>) + Send + Sync + 'static,
+    {
+        self.cbs.push(move |arg| {
+            f(arg);
+            true
+        });
+        self
+    }
 }
 
 impl<T: 'static> Stream<T> {
@@ -237,48 +251,9 @@ impl<T: 'static> Stream<T> {
             .push(move |arg| with_weak!(weak, |cb| f(arg, Sink { cbs: cb })));
         Stream::new(new_cbs, self.clone())
     }
-
-    /// Reads the values without modifying them.
-    ///
-    /// This is meant to be used as a debugging tool and not to cause side effects.
-    pub fn inspect<F>(self, f: F) -> Self
-    where
-        F: Fn(MaybeOwned<'_, T>) + Send + Sync + 'static,
-    {
-        self.cbs.push(move |arg| {
-            f(arg);
-            true
-        });
-        self
-    }
 }
 
 impl<T: Clone + 'static> Stream<T> {
-    /// Creates a Signal that holds the last value sent to this stream.
-    #[inline]
-    pub fn hold(&self, initial: T) -> Signal<T>
-    where
-        T: Send,
-    {
-        self.hold_if(initial, |_| true)
-    }
-
-    /// Holds the last value in this stream where the predicate is `true`.
-    pub fn hold_if<F>(&self, initial: T, pred: F) -> Signal<T>
-    where
-        F: Fn(&T) -> bool + Send + Sync + 'static,
-        T: Send,
-    {
-        let (storage, weak) = arc_and_weak(SharedImpl::new(initial, self.clone()));
-        self.cbs.push(move |arg| {
-            with_weak!(weak, |st| if pred(&arg) {
-                st.set(arg.into_owned());
-            })
-        });
-
-        Signal::from_storage(storage)
-    }
-
     /// Creates a collection from the values of this stream.
     #[inline]
     pub fn collect<C>(&self) -> Signal<C>
@@ -290,15 +265,35 @@ impl<T: Clone + 'static> Stream<T> {
             a
         })
     }
+}
+
+impl<T: Clone + Send + 'static> Stream<T> {
+    /// Creates a Signal that holds the last value sent to this stream.
+    #[inline]
+    pub fn hold(&self, initial: T) -> Signal<T> {
+        self.hold_if(initial, |_| true)
+    }
+
+    /// Holds the last value in this stream where the predicate is `true`.
+    pub fn hold_if<F>(&self, initial: T, pred: F) -> Signal<T>
+    where
+        F: Fn(&T) -> bool + Send + Sync + 'static,
+    {
+        let (storage, weak) = arc_and_weak(SharedImpl::new(initial, self.clone()));
+        self.cbs.push(move |arg| {
+            with_weak!(weak, |st| if pred(&arg) {
+                st.set(arg.into_owned());
+            })
+        });
+
+        Signal::from_storage(storage)
+    }
 
     /// Creates a channel and sends the stream events through it.
     ///
     /// This doesn't create a strong reference to the parent stream, so the channel sender will be dropped
     /// when the stream is deleted.
-    pub fn as_channel(&self) -> mpsc::Receiver<T>
-    where
-        T: Send,
-    {
+    pub fn as_channel(&self) -> mpsc::Receiver<T> {
         let (tx, rx) = mpsc::channel();
         //FIXME: it should use one Sender instance per thread but idk how to do it
         let tx_ = Mutex::new(tx);

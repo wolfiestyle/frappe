@@ -91,13 +91,14 @@ impl<T> Signal<T> {
             Nested(f) => f().take(),
         }
     }
-}
 
-impl<T: Clone> Signal<T> {
     /// Samples the value of the signal.
     ///
     /// This will clone the value stored in the signal.
-    pub fn sample(&self) -> T {
+    pub fn sample(&self) -> T
+    where
+        T: Clone,
+    {
         match self.0 {
             Constant(ref val) => T::clone(val),
             Dynamic(ref f) => f(),
@@ -108,16 +109,14 @@ impl<T: Clone> Signal<T> {
             Nested(ref f) => f().sample(),
         }
     }
-}
 
-impl<T: 'static> Signal<T> {
     /// Maps a signal with the provided function.
     ///
     /// The closure is called only when the parent signal changes.
     pub fn map<F, R>(&self, f: F) -> Signal<R>
     where
         F: Fn(MaybeOwned<'_, T>) -> R + Send + Sync + 'static,
-        T: Clone + Send,
+        T: Clone + 'static,
         R: Send + 'static,
     {
         match self.0 {
@@ -141,12 +140,14 @@ impl<T: 'static> Signal<T> {
             }
         }
     }
+}
 
+impl<T: Send + 'static> Signal<T> {
     /// Samples the value of this signal every time the trigger stream fires.
     pub fn snapshot<S, F, R>(&self, trigger: &Stream<S>, f: F) -> Stream<R>
     where
         F: Fn(MaybeOwned<'_, T>, MaybeOwned<'_, S>) -> R + Send + Sync + 'static,
-        T: Clone + Send,
+        T: Clone,
         S: 'static,
         R: 'static,
     {
@@ -155,10 +156,9 @@ impl<T: 'static> Signal<T> {
     }
 
     /// Creates a signal from a shared value.
-    pub(crate) fn from_storage<P: Send + Sync + 'static>(storage: Arc<SharedImpl<T, P, ()>>) -> Self
-    where
-        T: Send,
-    {
+    pub(crate) fn from_storage<P: Send + Sync + 'static>(
+        storage: Arc<SharedImpl<T, P, ()>>,
+    ) -> Self {
         Signal(Shared(storage))
     }
 
@@ -167,10 +167,7 @@ impl<T: 'static> Signal<T> {
     /// When sampled, the resulting signal consumes all the current values on the channel
     /// (using non-blocking operations) and returns the last value seen.
     #[inline]
-    pub fn from_channel(initial: T, rx: mpsc::Receiver<T>) -> Self
-    where
-        T: Send,
-    {
+    pub fn from_channel(initial: T, rx: mpsc::Receiver<T>) -> Self {
         Self::fold_channel(initial, rx, |_, v| v)
     }
 
@@ -182,7 +179,6 @@ impl<T: 'static> Signal<T> {
     pub fn fold_channel<V, F>(initial: T, rx: mpsc::Receiver<V>, f: F) -> Self
     where
         F: Fn(T, V) -> T + Send + Sync + 'static,
-        T: Send,
         V: Send + 'static,
     {
         Signal::shared(SharedImpl {

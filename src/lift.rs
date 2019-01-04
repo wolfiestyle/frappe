@@ -67,7 +67,7 @@ macro_rules! lift_impl
         /// Lifts a function into a signal.
         pub fn $fname<T, F, $($tname),+>(f: F, $($vname: Signal<$tname>),+) -> Signal<T>
             where F: Fn($($tname),+) -> T + Send + Sync + 'static,
-            T: Send + Sync + 'static, $($tname: Clone + Send + Sync + 'static),+
+            T: Send + 'static, $($tname: Clone + Send + Sync + 'static),+
         {
             Signal::shared(SharedImpl{
                 storage: Default::default(),
