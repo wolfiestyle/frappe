@@ -1,7 +1,5 @@
 //! Miscellaneous types used by the library.
 
-use std::ops;
-
 pub use maybe_owned::MaybeOwned;
 #[cfg(feature="either")]
 pub use either::Either;
@@ -11,6 +9,9 @@ pub(crate) use crate::types::callbacks::Callbacks;
 
 mod storage;
 pub(crate) use crate::types::storage::Storage;
+
+mod shared_impl;
+pub(crate) use crate::types::shared_impl::SharedImpl;
 
 /// Generic sum type of two elements.
 ///
@@ -93,22 +94,4 @@ pub(crate) trait SharedSignal<T>
     fn get_storage(&self) -> &Storage<T>;
     /// Samples the signal.
     fn sample(&self) -> &Storage<T>;
-}
-
-/// Common template for shared signal implementations.
-pub(crate) struct SharedImpl<T, S, F>
-{
-    pub storage: Storage<T>,
-    pub source: S,
-    pub f: F,
-}
-
-impl<T, S, F> ops::Deref for SharedImpl<T, S, F>
-{
-    type Target = Storage<T>;
-
-    fn deref(&self) -> &Self::Target
-    {
-        &self.storage
-    }
 }
