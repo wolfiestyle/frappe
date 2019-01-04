@@ -89,8 +89,6 @@ pub(crate) trait SharedSignal<T>
 {
     /// Updates the signal.
     fn update(&self);
-    /// Checks if the value has changed.
-    fn has_changed(&self) -> bool;
     /// Obtains the internal storage.
     fn get_storage(&self) -> &Storage<T>;
     /// Samples the signal.

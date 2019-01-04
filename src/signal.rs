@@ -69,7 +69,7 @@ impl<T> Signal<T>
             Dynamic(_) | Nested(_) => true,
             Shared(ref s) => {
                 s.update();
-                s.has_changed()
+                s.get_storage().must_update()
             },
         }
     }
@@ -281,11 +281,6 @@ impl<T, S> SharedSignal<T> for SharedImpl<T, S, ()>
 {
     fn update(&self) {}
 
-    fn has_changed(&self) -> bool
-    {
-        self.storage.must_update()
-    }
-
     fn get_storage(&self) -> &Storage<T>
     {
         &self.storage
@@ -307,11 +302,6 @@ impl<T, P, F> SharedSignal<T> for SharedImpl<T, Arc<dyn SharedSignal<P> + Send +
         self.source.update()
     }
 
-    fn has_changed(&self) -> bool
-    {
-        self.storage.must_update()
-    }
-
     fn get_storage(&self) -> &Storage<T>
     {
         &self.storage
@@ -319,7 +309,7 @@ impl<T, P, F> SharedSignal<T> for SharedImpl<T, Arc<dyn SharedSignal<P> + Send +
 
     fn sample(&self) -> &Storage<T>
     {
-        if self.has_changed()
+        if self.storage.must_update()
         {
             let res = (self.f)(MaybeOwned::Owned(self.source.sample().get()));
             self.storage.set_local(res);
@@ -343,11 +333,6 @@ impl<T, S, F> SharedSignal<T> for SharedImpl<T, Mutex<mpsc::Receiver<S>>, F>
                 source.try_iter().fold(acc, &self.f)
             });
         }
-    }
-
-    fn has_changed(&self) -> bool
-    {
-        self.storage.must_update()
     }
 
     fn get_storage(&self) -> &Storage<T>

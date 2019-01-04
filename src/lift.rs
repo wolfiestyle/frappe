@@ -48,11 +48,6 @@ macro_rules! lift_impl
                 }
             }
 
-            fn has_changed(&self) -> bool
-            {
-                self.storage.must_update()
-            }
-
             fn get_storage(&self) -> &Storage<T>
             {
                 &self.storage
@@ -60,7 +55,7 @@ macro_rules! lift_impl
 
             fn sample(&self) -> &Storage<T>
             {
-                if self.has_changed()
+                if self.storage.must_update()
                 {
                     let val = (self.f)($(self.source.$idx.sample()),+);
                     self.storage.set_local(val);
