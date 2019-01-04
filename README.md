@@ -2,8 +2,8 @@
 
 Functional Reactive Programming library inspired by [Carboxyl](https://github.com/aepsil0n/carboxyl).
 It's designed to efficiently pass objects around by avoiding cloning as much as possible, and by
-evaluating signals only when changes happen. Threading is not directly supported, but there are methods
-that interface with channels.
+evaluating signals only when changes happen. Threading is now supported (experimental), streams and
+signals can be freely moved and used between threads.
 
 [Documentation](https://docs.rs/frappe)
 
