@@ -1,8 +1,8 @@
 //! FRP benchmarks from https://github.com/aepsil0n/carboxyl
 
-use rand::prelude::*;
-use bencher::{Bencher, benchmark_group, benchmark_main};
+use bencher::{benchmark_group, benchmark_main, Bencher};
 use frappe::Sink;
+use rand::prelude::*;
 
 /// Second-order benchmark.
 ///
@@ -16,10 +16,9 @@ use frappe::Sink;
 fn second_order(n_sinks: usize, n_steps: usize, b: &mut Bencher) {
     // Setup network
     let stepper = Sink::<usize>::new();
-    let sinks: Vec<_> = (0..n_sinks)
-        .map(|_| Sink::new())
-        .collect();
-    let counters: Vec<_> = sinks.iter()
+    let sinks: Vec<_> = (0..n_sinks).map(|_| Sink::new()).collect();
+    let counters: Vec<_> = sinks
+        .iter()
         .map(|sink| sink.stream().fold(0, |n, _| n + 1))
         .collect();
     let walker = {
@@ -55,6 +54,10 @@ fn second_order_10k(b: &mut Bencher) {
     second_order(1_000, 10_000, b);
 }
 
-
-benchmark_group!(second_order_, second_order_100, second_order_1k, second_order_10k);
+benchmark_group!(
+    second_order_,
+    second_order_100,
+    second_order_1k,
+    second_order_10k
+);
 benchmark_main!(second_order_);

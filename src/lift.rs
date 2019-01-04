@@ -1,7 +1,7 @@
 //! Utilities for lifting functions into signals.
 
-use crate::types::{Storage, SharedSignal, SharedImpl};
 use crate::signal::Signal;
+use crate::types::{SharedImpl, SharedSignal, Storage};
 
 /// Maps a function over the value of signals.
 ///

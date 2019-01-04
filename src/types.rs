@@ -1,8 +1,8 @@
 //! Miscellaneous types used by the library.
 
-pub use maybe_owned::MaybeOwned;
-#[cfg(feature="either")]
+#[cfg(feature = "either")]
 pub use either::Either;
+pub use maybe_owned::MaybeOwned;
 
 mod callbacks;
 pub(crate) use crate::types::callbacks::Callbacks;
@@ -16,8 +16,7 @@ pub(crate) use crate::types::shared_impl::SharedImpl;
 /// Generic sum type of two elements.
 ///
 /// It's used to provide generics over the `Option`/`Result`/`Either` types
-pub trait SumType2
-{
+pub trait SumType2 {
     /// Type of the first variant.
     type Type1;
     /// Type of the second variant.
@@ -39,55 +38,87 @@ pub trait SumType2
     fn into_type2(self) -> Option<Self::Type2>;
 }
 
-impl<T> SumType2 for Option<T>
-{
+impl<T> SumType2 for Option<T> {
     type Type1 = T;
     type Type2 = ();
 
-    fn from_type1(val: Self::Type1) -> Self { Some(val) }
-    fn from_type2(_: Self::Type2) -> Self { None }
+    fn from_type1(val: Self::Type1) -> Self {
+        Some(val)
+    }
+    fn from_type2(_: Self::Type2) -> Self {
+        None
+    }
 
-    fn is_type1(&self) -> bool { self.is_some() }
-    fn is_type2(&self) -> bool { self.is_none() }
+    fn is_type1(&self) -> bool {
+        self.is_some()
+    }
+    fn is_type2(&self) -> bool {
+        self.is_none()
+    }
 
-    fn into_type1(self) -> Option<Self::Type1> { self }
-    fn into_type2(self) -> Option<Self::Type2> { self.ok_or(()).err() }
+    fn into_type1(self) -> Option<Self::Type1> {
+        self
+    }
+    fn into_type2(self) -> Option<Self::Type2> {
+        self.ok_or(()).err()
+    }
 }
 
-impl<T, E> SumType2 for Result<T, E>
-{
+impl<T, E> SumType2 for Result<T, E> {
     type Type1 = T;
     type Type2 = E;
 
-    fn from_type1(val: Self::Type1) -> Self { Ok(val) }
-    fn from_type2(val: Self::Type2) -> Self { Err(val) }
+    fn from_type1(val: Self::Type1) -> Self {
+        Ok(val)
+    }
+    fn from_type2(val: Self::Type2) -> Self {
+        Err(val)
+    }
 
-    fn is_type1(&self) -> bool { self.is_ok() }
-    fn is_type2(&self) -> bool { self.is_err() }
+    fn is_type1(&self) -> bool {
+        self.is_ok()
+    }
+    fn is_type2(&self) -> bool {
+        self.is_err()
+    }
 
-    fn into_type1(self) -> Option<Self::Type1> { self.ok() }
-    fn into_type2(self) -> Option<Self::Type2> { self.err() }
+    fn into_type1(self) -> Option<Self::Type1> {
+        self.ok()
+    }
+    fn into_type2(self) -> Option<Self::Type2> {
+        self.err()
+    }
 }
 
-#[cfg(feature="either")]
-impl<L, R> SumType2 for ::either::Either<L, R>
-{
+#[cfg(feature = "either")]
+impl<L, R> SumType2 for ::either::Either<L, R> {
     type Type1 = L;
     type Type2 = R;
 
-    fn from_type1(val: Self::Type1) -> Self { Either::Left(val) }
-    fn from_type2(val: Self::Type2) -> Self { Either::Right(val) }
+    fn from_type1(val: Self::Type1) -> Self {
+        Either::Left(val)
+    }
+    fn from_type2(val: Self::Type2) -> Self {
+        Either::Right(val)
+    }
 
-    fn is_type1(&self) -> bool { self.is_left() }
-    fn is_type2(&self) -> bool { self.is_right() }
+    fn is_type1(&self) -> bool {
+        self.is_left()
+    }
+    fn is_type2(&self) -> bool {
+        self.is_right()
+    }
 
-    fn into_type1(self) -> Option<Self::Type1> { self.left() }
-    fn into_type2(self) -> Option<Self::Type2> { self.right() }
+    fn into_type1(self) -> Option<Self::Type1> {
+        self.left()
+    }
+    fn into_type2(self) -> Option<Self::Type2> {
+        self.right()
+    }
 }
 
 /// Defines a signal that contains shared storage.
-pub(crate) trait SharedSignal<T>
-{
+pub(crate) trait SharedSignal<T> {
     /// Updates the signal.
     fn update(&self);
     /// Obtains the internal storage.

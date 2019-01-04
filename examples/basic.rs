@@ -1,12 +1,10 @@
 use frappe::Sink;
 
-fn main()
-{
+fn main() {
     // values are sent from a sink..
     let sink = Sink::new();
     // ..into a stream chain
-    let stream = sink.stream()
-        .inspect(|a| println!("--sent: {}", a));
+    let stream = sink.stream().inspect(|a| println!("--sent: {}", a));
 
     // `hold` creates a Signal that stores the last value sent to the stream
     let last = stream.hold(0);

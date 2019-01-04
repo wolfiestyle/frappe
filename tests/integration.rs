@@ -1,22 +1,31 @@
-use frappe::{Sink, Stream, Signal, signal_lift};
-use std::sync::{Arc, RwLock};
+use frappe::{signal_lift, Signal, Sink, Stream};
 use std::fmt::Debug;
+use std::sync::{Arc, RwLock};
 
 #[test]
-fn stream_operations()
-{
+fn stream_operations() {
     let sink: Sink<i32> = Sink::new();
     let stream = sink.stream();
 
     let s_string = stream.map(|a| a.to_string()).collect::<Vec<_>>();
     let s_odd = stream.filter(|a| a % 2 != 0).collect::<Vec<_>>();
-    let s_even_half = stream.filter_map(|a| if *a % 2 == 0 { Some(*a / 2) } else { None }).collect::<Vec<_>>();
-    let (pos, neg) = stream.map(|a| if *a > 0 { Ok(*a) } else { Err(*a) }).split();
+    let s_even_half = stream
+        .filter_map(|a| if *a % 2 == 0 { Some(*a / 2) } else { None })
+        .collect::<Vec<_>>();
+    let (pos, neg) = stream
+        .map(|a| if *a > 0 { Ok(*a) } else { Err(*a) })
+        .split();
     let s_pos = pos.collect::<Vec<_>>();
     let s_neg = neg.collect::<Vec<_>>();
     let s_merged = pos.merge(&neg.map(|a| -*a)).collect::<Vec<_>>();
-    let s_accum = stream.collect::<Vec<_>>().snapshot(&stream, |s, _| s.into_owned()).collect::<Vec<_>>();
-    let s_cloned = stream.fold_clone(vec![], |mut a, v| { a.push(v.into_owned()); a });
+    let s_accum = stream
+        .collect::<Vec<_>>()
+        .snapshot(&stream, |s, _| s.into_owned())
+        .collect::<Vec<_>>();
+    let s_cloned = stream.fold_clone(vec![], |mut a, v| {
+        a.push(v.into_owned());
+        a
+    });
     let s_last_pos = stream.hold_if(0, |a| *a > 0);
 
     sink.feed_ref(&[5, 8, 13, -2, 42, -33]);
@@ -27,17 +36,28 @@ fn stream_operations()
     assert_eq!(s_pos.sample(), [5, 8, 13, 42]);
     assert_eq!(s_neg.sample(), [-2, -33]);
     assert_eq!(s_merged.sample(), [5, 8, 13, 2, 42, 33]);
-    assert_eq!(s_accum.sample(), [vec![5], vec![5, 8], vec![5, 8, 13], vec![5, 8, 13, -2], vec![5, 8, 13, -2, 42], vec![5, 8, 13, -2, 42, -33]]);
+    assert_eq!(
+        s_accum.sample(),
+        [
+            vec![5],
+            vec![5, 8],
+            vec![5, 8, 13],
+            vec![5, 8, 13, -2],
+            vec![5, 8, 13, -2, 42],
+            vec![5, 8, 13, -2, 42, -33]
+        ]
+    );
     assert_eq!(s_cloned.sample(), [5, 8, 13, -2, 42, -33]);
     assert_eq!(s_last_pos.sample(), 42);
 }
 
 #[test]
-fn merge_with()
-{
+fn merge_with() {
     let sink1: Sink<i32> = Sink::new();
     let sink2: Sink<f32> = Sink::new();
-    let stream = sink1.stream().merge_with(&sink2.stream(), |l| Ok(*l), |r| Err(*r));
+    let stream = sink1
+        .stream()
+        .merge_with(&sink2.stream(), |l| Ok(*l), |r| Err(*r));
     let result = stream.collect::<Vec<_>>();
 
     sink1.send(1);
@@ -50,8 +70,7 @@ fn merge_with()
 }
 
 #[test]
-fn stream_channel()
-{
+fn stream_channel() {
     use std::sync::mpsc::channel;
 
     let sink = Sink::new();
@@ -83,10 +102,8 @@ fn stream_channel()
     assert_eq!(s_doubles.sample(), 9900);
 }
 
-
 #[test]
-fn signal_switch()
-{
+fn signal_switch() {
     let signal_sink = Sink::new();
     let switched = signal_sink.stream().hold(Default::default()).switch();
     let double = switched.map(|a| *a * 2);
@@ -101,20 +118,24 @@ fn signal_switch()
 }
 
 #[test]
-fn cloning()
-{
+fn cloning() {
     #[derive(Debug, Default)]
     struct Storage<T>(Vec<T>);
 
-    impl<T> Storage<T>
-    {
-        fn new() -> Self { Storage(Vec::new()) }
-        fn push(mut self, a: T) -> Self { self.0.push(a); self }
+    impl<T> Storage<T> {
+        fn new() -> Self {
+            Storage(Vec::new())
+        }
+        fn push(mut self, a: T) -> Self {
+            self.0.push(a);
+            self
+        }
     }
 
-    impl<T: Debug> Clone for Storage<T>
-    {
-        fn clone(&self) -> Self { panic!("storage cloned! {:?}", self.0) }
+    impl<T: Debug> Clone for Storage<T> {
+        fn clone(&self) -> Self {
+            panic!("storage cloned! {:?}", self.0)
+        }
     }
 
     let sink = Sink::new();
@@ -125,8 +146,7 @@ fn cloning()
 }
 
 #[test]
-fn filter_extra()
-{
+fn filter_extra() {
     let sink = Sink::new();
     let stream = sink.stream();
     let sign_res = stream.map(|a| if *a >= 0 { Ok(*a) } else { Err(*a) });
@@ -143,12 +163,19 @@ fn filter_extra()
 }
 
 #[test]
-fn reentrant()
-{
+fn reentrant() {
     let sink = Sink::new();
     let cloned = sink.clone();
-    let sig = sink.stream()
-        .filter_map(move |n| if *n < 10 { cloned.send(*n + 1); None } else { Some(*n) })
+    let sig = sink
+        .stream()
+        .filter_map(move |n| {
+            if *n < 10 {
+                cloned.send(*n + 1);
+                None
+            } else {
+                Some(*n)
+            }
+        })
         .hold(0);
 
     sink.send(1);
@@ -157,13 +184,13 @@ fn reentrant()
 
 #[allow(unused_variables)]
 #[test]
-fn deletion()
-{
-    fn stream_cell(src: &Stream<i32>, i: i32) -> (Stream<i32>, Arc<RwLock<i32>>)
-    {
+fn deletion() {
+    fn stream_cell(src: &Stream<i32>, i: i32) -> (Stream<i32>, Arc<RwLock<i32>>) {
         let cell = Arc::new(RwLock::new(0));
         let cloned = cell.clone();
-        let stream = src.map(move |n| *n + i).inspect(move |n| *cloned.write().unwrap() = *n);
+        let stream = src
+            .map(move |n| *n + i)
+            .inspect(move |n| *cloned.write().unwrap() = *n);
         (stream, cell)
     }
 
@@ -186,11 +213,15 @@ fn deletion()
 }
 
 #[test]
-fn map_n()
-{
+fn map_n() {
     let sink = Sink::new();
-    let s_out = sink.stream()
-        .map_n(|a, sink| for _ in 0 .. *a { sink.send(*a) })
+    let s_out = sink
+        .stream()
+        .map_n(|a, sink| {
+            for _ in 0..*a {
+                sink.send(*a)
+            }
+        })
         .collect::<Vec<_>>();
 
     sink.feed(0..4);
@@ -199,8 +230,7 @@ fn map_n()
 }
 
 #[test]
-fn lift()
-{
+fn lift() {
     let sink1 = Sink::new();
     let res = signal_lift!(|a| *a + 1, sink1.stream().hold(0));
 
@@ -209,7 +239,8 @@ fn lift()
     assert_eq!(res.sample(), 13);
 
     let sink2 = Sink::new();
-    let res = signal_lift!(sink1.stream().hold(0), sink2.stream().hold("a") => |a, b| a.to_string() + &b);
+    let res =
+        signal_lift!(sink1.stream().hold(0), sink2.stream().hold("a") => |a, b| a.to_string() + &b);
     let mapped = res.map(|s| format!("({})", s));
 
     assert_eq!(mapped.sample(), "(0a)");
@@ -220,10 +251,9 @@ fn lift()
 }
 
 #[test]
-fn stream_collect()
-{
-    use std::collections::*;
+fn stream_collect() {
     use std::cmp::Ordering;
+    use std::collections::*;
 
     let sink = Sink::new();
     let stream = sink.stream();
@@ -237,8 +267,14 @@ fn stream_collect()
 
     assert_eq!(s_vec.sample(), [1, 3, -42, 2]);
     assert_eq!(s_vecdq.sample(), [1, 3, -42, 2]);
-    assert_eq!(s_list.sample().iter().cmp([1, 3, -42, 2].iter()), Ordering::Equal);
-    assert_eq!(s_set.sample().iter().cmp([-42, 1, 2, 3].iter()), Ordering::Equal);
+    assert_eq!(
+        s_list.sample().iter().cmp([1, 3, -42, 2].iter()),
+        Ordering::Equal
+    );
+    assert_eq!(
+        s_set.sample().iter().cmp([-42, 1, 2, 3].iter()),
+        Ordering::Equal
+    );
     assert_eq!(s_string.sample(), "1 3 -42 2 ");
 
     let sink = Sink::new();
@@ -250,14 +286,16 @@ fn stream_collect()
 }
 
 #[test]
-fn signal_chain()
-{
+fn signal_chain() {
     let sink = Sink::new();
     let eval_count = Arc::new(RwLock::new(0));
     let ev = eval_count.clone();
 
     let sig_a = sink.stream().hold(0);
-    let sig_b = sig_a.map(move |a| { *ev.write().unwrap() += 1; *a + 1 });
+    let sig_b = sig_a.map(move |a| {
+        *ev.write().unwrap() += 1;
+        *a + 1
+    });
     let sig_c = sig_b.map(|a| *a * 2);
     let sig_d = sig_c.map(|a| format!("({})", a));
     let sig_e = sig_d.map(|s| s.into_owned() + ".-");
@@ -278,16 +316,13 @@ fn signal_chain()
 }
 
 #[test]
-fn signal_take()
-{
+fn signal_take() {
     #[derive(Debug, Clone, PartialEq, Eq, Default)]
     struct Value(i32);
 
     let sink = Sink::new();
 
-    let sig = sink.stream()
-        .hold(Value(0))
-        .map(|v| Value(v.0 + 1));
+    let sig = sink.stream().hold(Value(0)).map(|v| Value(v.0 + 1));
 
     sink.send(Value(41));
 
@@ -296,48 +331,48 @@ fn signal_take()
 }
 
 #[test]
-fn signal_threading()
-{
+fn signal_threading() {
     let sink = Sink::new();
     let sig = sink.stream().hold(0);
     sink.send(2);
 
-    let threads: Vec<_> = (0..6).map(|i| {
-        let sig_ = sig.clone();
-        std::thread::spawn(move || {
-            sig_.map(move |x| i32::pow(*x, i)).sample()
+    let threads: Vec<_> = (0..6)
+        .map(|i| {
+            let sig_ = sig.clone();
+            std::thread::spawn(move || sig_.map(move |x| i32::pow(*x, i)).sample())
         })
-    }).collect();
+        .collect();
 
     let result: Vec<_> = threads.into_iter().map(|th| th.join().unwrap()).collect();
     assert_eq!(result, [1, 2, 4, 8, 16, 32]);
 }
 
 #[test]
-fn stream_threading()
-{
+fn stream_threading() {
     let sink = Sink::new();
-    let sig = sink.stream()
-        .map(|x| *x + 1)
-        .fold(1, |a, x| a * *x);
+    let sig = sink.stream().map(|x| *x + 1).fold(1, |a, x| a * *x);
 
-    let threads: Vec<_> = (0..6).map(|i| {
-        let sink_ = sink.clone();
-        std::thread::spawn(move || sink_.send(i))
-    }).collect();
+    let threads: Vec<_> = (0..6)
+        .map(|i| {
+            let sink_ = sink.clone();
+            std::thread::spawn(move || sink_.send(i))
+        })
+        .collect();
 
-    for th in threads { th.join().unwrap(); }
+    for th in threads {
+        th.join().unwrap();
+    }
 
     assert_eq!(sig.sample(), 720);
 }
 
 #[test]
-fn send_non_sync()
-{
+fn send_non_sync() {
     use std::cell::Cell;
 
     let sink: Sink<Cell<_>> = Sink::new();
-    let sig = sink.stream()
+    let sig = sink
+        .stream()
         .map(|x| Cell::new(x.get() * 2))
         .hold(Default::default())
         .map(|x| Cell::new(x.get() + 2));

@@ -1,11 +1,12 @@
 //! Simple benchmarks, from https://github.com/aepsil0n/carboxyl
 
-use bencher::{Bencher, benchmark_group, benchmark_main, black_box};
-use frappe::{Sink, Signal};
+use bencher::{benchmark_group, benchmark_main, black_box, Bencher};
+use frappe::{Signal, Sink};
 
 fn make_chain() -> (Sink<i32>, Signal<i32>) {
     let sink = Sink::new();
-    let sig = sink.stream()
+    let sig = sink
+        .stream()
         .map(|x| *x + 4)
         .filter(|&x| x < 4)
         .merge(&sink.stream().map(|x| *x * 5))
@@ -33,7 +34,6 @@ fn send_and_sample(b: &mut Bencher) {
         sig.sample()
     });
 }
-
 
 benchmark_group!(simple, send, sample, send_and_sample);
 benchmark_main!(simple);
