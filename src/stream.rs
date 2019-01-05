@@ -307,8 +307,7 @@ impl<T: Clone + Send + 'static> Stream<T> {
         let (tx, rx) = mpsc::channel();
         //FIXME: it should use one Sender instance per thread but idk how to do it
         let tx_ = Mutex::new(tx);
-        self.cbs
-            .push(move |arg| tx_.lock().send(arg.into_owned()).is_ok());
+        self.observe(move |arg| tx_.lock().send(arg.into_owned()));
         rx
     }
 }
@@ -437,7 +436,13 @@ mod tests {
     fn stream_basic() {
         let sink = Sink::new();
         let stream = sink.stream();
-        let rx = stream.as_channel();
+
+        let result = {
+            let vec = Arc::new(Mutex::new(Vec::new()));
+            let vec_ = vec.clone();
+            stream.observe(move |a| vec_.lock().push(*a));
+            vec
+        };
 
         sink.send(42);
         sink.send(33);
@@ -445,8 +450,7 @@ mod tests {
         sink.feed(0..5);
         sink.feed_ref(&[11, 22, 33]);
 
-        let result: Vec<_> = rx.try_iter().collect();
-        assert_eq!(result, [42, 33, 12, 0, 1, 2, 3, 4, 11, 22, 33]);
+        assert_eq!(*result.lock(), [42, 33, 12, 0, 1, 2, 3, 4, 11, 22, 33]);
     }
 
     #[test]
