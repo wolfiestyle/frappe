@@ -25,16 +25,20 @@ impl<T> FnCell<T> {
 
     /// Calls the stored function and updates it's callable status.
     fn call(&self, arg: MaybeOwned<'_, T>) -> bool {
-        let is_alive = self.alive.load(Ordering::Acquire) && (self.f)(arg);
-        if !is_alive {
-            self.alive.store(false, Ordering::Release);
+        if self.alive.load(Ordering::Acquire) {
+            let is_alive = (self.f)(arg);
+            if !is_alive {
+                self.alive.store(false, Ordering::Release);
+            }
+            is_alive
+        } else {
+            false
         }
-        is_alive
     }
 
     /// Checks if this function can still be called.
     fn is_alive(&self) -> bool {
-        self.alive.load(Ordering::Relaxed)
+        self.alive.load(Ordering::Acquire)
     }
 }
 
