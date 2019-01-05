@@ -9,13 +9,13 @@ fn main() {
     let result = sink
         .stream()
         // we'll do this part on another thread
-        .map_n(move |arg, sink_| {
+        .map_n(move |arg, sender| {
             let n = *arg;
             let main_th = thread::current();
             // our expensive computation (sleep sort)
             thread::spawn(move || {
                 thread::sleep(Duration::from_millis(n));
-                sink_.send(n);
+                sender.send(n);
                 main_th.unpark(); // signal that there is data available
             });
         })

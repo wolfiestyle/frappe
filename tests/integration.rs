@@ -217,9 +217,9 @@ fn map_n() {
     let sink = Sink::new();
     let s_out = sink
         .stream()
-        .map_n(|a, sink| {
+        .map_n(|a, sender| {
             for _ in 0..*a {
-                sink.send(*a)
+                sender.send(*a)
             }
         })
         .collect::<Vec<_>>();

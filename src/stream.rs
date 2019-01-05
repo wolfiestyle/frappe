@@ -246,19 +246,19 @@ impl<T: 'static> Stream<T> {
 
     /// Maps each stream event to `0..N` output values.
     ///
-    /// The closure must return it's value by sending it through the provided sink.
+    /// The closure must return its value by sending it through the provided Sender.
     /// Multiple values (or none) can be sent to the output stream this way.
     ///
     /// This primitive is useful to construct asynchronous operations, since you can
-    /// store the sink for later usage.
+    /// store the Sender and use it when the data is ready.
     pub fn map_n<F, R>(&self, f: F) -> Stream<R>
     where
-        F: Fn(MaybeOwned<'_, T>, Sink<R>) + Send + Sync + 'static,
+        F: Fn(MaybeOwned<'_, T>, Sender<R>) + Send + Sync + 'static,
         R: 'static,
     {
         let (new_cbs, weak) = arc_and_weak(Callbacks::new());
         self.cbs
-            .push(move |arg| with_weak!(weak, |cb| f(arg, Sink { cbs: cb })));
+            .push(move |arg| with_weak!(weak, |cb| f(arg, Sender::new(cb))));
         Stream::new(new_cbs, self.clone())
     }
 }
@@ -425,6 +425,41 @@ impl<T> Default for Stream<T> {
     #[inline]
     fn default() -> Self {
         Stream::never()
+    }
+}
+
+/// Sends values into a stream.
+///
+/// This is a restricted version of `Sink` used by `Stream::map_n`.
+#[derive(Debug)]
+pub struct Sender<T>(Sink<T>);
+
+impl<T> Sender<T> {
+    /// Constructs a new Sender from a list of callbacks.
+    fn new(cbs: Arc<Callbacks<T>>) -> Self {
+        Sender(Sink { cbs })
+    }
+
+    /// Sends a value.
+    #[inline]
+    pub fn send(&self, val: T) {
+        self.0.send(val)
+    }
+
+    /// Sends multiple values.
+    #[inline]
+    pub fn feed<I>(&self, iter: I)
+    where
+        I: IntoIterator<Item = T>,
+    {
+        self.0.feed(iter)
+    }
+}
+
+impl<T> Clone for Sender<T> {
+    /// Creates a copy of this sender that references the same event source.
+    fn clone(&self) -> Self {
+        Sender(self.0.clone())
     }
 }
 
