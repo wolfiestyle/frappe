@@ -1,3 +1,5 @@
+//! Signals are values that discretely change over time.
+
 use crate::stream::Stream;
 use crate::types::{MaybeOwned, SharedImpl, SharedSignal, Storage};
 use parking_lot::Mutex;

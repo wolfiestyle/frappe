@@ -4,8 +4,8 @@
 #[macro_use]
 mod helpers;
 pub mod lift;
-mod signal;
-mod stream;
+pub mod signal;
+pub mod stream;
 pub mod types;
 
 pub use crate::signal::Signal;

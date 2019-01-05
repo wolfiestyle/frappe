@@ -1,3 +1,5 @@
+//! Streams provide a way to process discrete events sent over time.
+
 use crate::helpers::arc_and_weak;
 use crate::signal::Signal;
 use crate::types::{Callbacks, MaybeOwned, ObserveResult, SharedImpl, SumType2};
