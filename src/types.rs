@@ -126,3 +126,37 @@ pub(crate) trait SharedSignal<T> {
     /// Samples the signal.
     fn sample(&self) -> &Storage<T>;
 }
+
+/// Determines if the `Stream::observe` callback should be dropped or not.
+pub trait ObserveResult {
+    /// If it returns `true` the callback is kept, otherwise it's dropped.
+    fn is_callback_alive(self) -> bool;
+}
+
+impl ObserveResult for () {
+    /// No return value: never dropped.
+    fn is_callback_alive(self) -> bool {
+        true
+    }
+}
+
+impl ObserveResult for bool {
+    /// `bool` return value: dropped when it's `false`.
+    fn is_callback_alive(self) -> bool {
+        self
+    }
+}
+
+impl<T> ObserveResult for Option<T> {
+    /// `Option` return value: dropped when it's `None`.
+    fn is_callback_alive(self) -> bool {
+        self.is_some()
+    }
+}
+
+impl<T, E> ObserveResult for Result<T, E> {
+    /// `Result` return value: dropped when it's `Err`.
+    fn is_callback_alive(self) -> bool {
+        self.is_ok()
+    }
+}

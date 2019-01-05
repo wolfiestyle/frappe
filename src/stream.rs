@@ -1,6 +1,6 @@
 use crate::helpers::arc_and_weak;
 use crate::signal::Signal;
-use crate::types::{Callbacks, MaybeOwned, SharedImpl, SumType2};
+use crate::types::{Callbacks, MaybeOwned, ObserveResult, SharedImpl, SumType2};
 use parking_lot::Mutex;
 use std::any::Any;
 use std::iter;
@@ -105,17 +105,27 @@ impl<T> Stream<T> {
         Stream::new(Default::default(), ())
     }
 
-    /// Reads the values without modifying them.
+    /// Reads the values from the stream.
     ///
-    /// This is meant to be used as a debugging tool, not to cause side effects.
-    pub fn inspect<F>(self, f: F) -> Self
+    /// The value returned by the closure determines the lifetime of this callback.
+    pub fn observe<F, R>(&self, f: F)
     where
-        F: Fn(MaybeOwned<'_, T>) + Send + Sync + 'static,
+        F: Fn(MaybeOwned<'_, T>) -> R + Send + Sync + 'static,
+        R: ObserveResult,
     {
-        self.cbs.push(move |arg| {
-            f(arg);
-            true
-        });
+        self.cbs.push(move |arg| f(arg).is_callback_alive());
+    }
+
+    /// Chainable version of `Stream::observe`
+    ///
+    /// This is a convenience function meant to be used as a debugging tool.
+    #[inline]
+    pub fn inspect<F, R>(self, f: F) -> Self
+    where
+        F: Fn(MaybeOwned<'_, T>) -> R + Send + Sync + 'static,
+        R: ObserveResult,
+    {
+        self.observe(f);
         self
     }
 }
