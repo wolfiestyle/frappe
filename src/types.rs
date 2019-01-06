@@ -11,7 +11,7 @@ mod storage;
 pub(crate) use crate::types::storage::Storage;
 
 mod shared_impl;
-pub(crate) use crate::types::shared_impl::SharedImpl;
+pub(crate) use crate::types::shared_impl::{SharedImpl, SharedSignal};
 
 /// Generic sum type of two elements.
 ///
@@ -115,16 +115,6 @@ impl<L, R> SumType2 for ::either::Either<L, R> {
     fn into_type2(self) -> Option<Self::Type2> {
         self.right()
     }
-}
-
-/// Defines a signal that contains shared storage.
-pub(crate) trait SharedSignal<T> {
-    /// Updates the signal.
-    fn update(&self);
-    /// Obtains the internal storage.
-    fn get_storage(&self) -> &Storage<T>;
-    /// Samples the signal.
-    fn sample(&self) -> &Storage<T>;
 }
 
 /// Determines if the `Stream::observe` callback should be dropped or not.

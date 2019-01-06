@@ -1,7 +1,17 @@
-use crate::types::{SharedSignal, Storage};
+use crate::types::Storage;
 use parking_lot::Mutex;
 use std::ops;
 use std::sync::{mpsc, Arc};
+
+/// Defines a signal that contains shared storage.
+pub trait SharedSignal<T> {
+    /// Updates the signal.
+    fn update(&self);
+    /// Obtains the internal storage.
+    fn get_storage(&self) -> &Storage<T>;
+    /// Samples the signal.
+    fn sample(&self) -> &Storage<T>;
+}
 
 /// Common template for shared signal implementations.
 pub struct SharedImpl<T, S, F> {
