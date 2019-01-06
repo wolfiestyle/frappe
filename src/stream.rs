@@ -25,7 +25,7 @@ impl<T> Sink<T> {
 
     /// Creates a stream that receives the events sent to this sink.
     pub fn stream(&self) -> Stream<T> {
-        Stream::new(self.cbs.clone(), ())
+        Stream::new(self.cbs.clone(), Source::None)
     }
 
     /// Sends a value into the sink.
@@ -84,6 +84,27 @@ impl<T> Clone for Sink<T> {
     }
 }
 
+/// The source object of a Stream.
+///
+/// This is used to create a strong reference to a parent stream.
+#[derive(Debug, Clone)]
+enum Source {
+    /// No source.
+    None,
+    /// The source is a type-erased object. Usually a stream of a different type.
+    Erased(Arc<dyn Any + Send + Sync>),
+}
+
+impl Source {
+    fn stream<T: 'static>(s: &Stream<T>) -> Self {
+        Source::Erased(Arc::new(s.clone()))
+    }
+
+    fn stream2<A: 'static, B: 'static>(s1: &Stream<A>, s2: &Stream<B>) -> Self {
+        Source::Erased(Arc::new((s1.clone(), s2.clone())))
+    }
+}
+
 /// A stream of discrete events sent over time.
 ///
 /// All the objects that result from stream operations contain an internal reference to it's parent,
@@ -91,20 +112,17 @@ impl<T> Clone for Sink<T> {
 #[derive(Debug)]
 pub struct Stream<T> {
     cbs: Arc<Callbacks<T>>,
-    source: Arc<dyn Any + Send + Sync>, // strong reference to a parent Stream
+    source: Source,
 }
 
 impl<T> Stream<T> {
-    fn new<S: Send + Sync + 'static>(cbs: Arc<Callbacks<T>>, source: S) -> Self {
-        Stream {
-            cbs,
-            source: Arc::new(source),
-        }
+    fn new(cbs: Arc<Callbacks<T>>, source: Source) -> Self {
+        Stream { cbs, source }
     }
 
     /// Creates a stream that never fires.
     pub fn never() -> Self {
-        Stream::new(Default::default(), ())
+        Stream::new(Default::default(), Source::None)
     }
 
     /// Reads the values from the stream.
@@ -154,7 +172,7 @@ impl<T: 'static> Stream<T> {
                 cb.call_dyn(arg)
             })
         });
-        Stream::new(new_cbs, self.clone())
+        Stream::new(new_cbs, Source::stream(self))
     }
 
     /// Filter and map a stream simultaneously.
@@ -169,7 +187,7 @@ impl<T: 'static> Stream<T> {
                 cb.call(val)
             })
         });
-        Stream::new(new_cbs, self.clone())
+        Stream::new(new_cbs, Source::stream(self))
     }
 
     /// Creates a new stream that fires with the events from both streams.
@@ -181,7 +199,7 @@ impl<T: 'static> Stream<T> {
         other
             .cbs
             .push(move |arg| with_weak!(weak2, |cb| cb.call_dyn(arg)));
-        Stream::new(new_cbs, (self.clone(), other.clone()))
+        Stream::new(new_cbs, Source::stream2(self, other))
     }
 
     /// Merges two streams of different types using two functions that return the same type.
@@ -199,7 +217,7 @@ impl<T: 'static> Stream<T> {
         other
             .cbs
             .push(move |arg| with_weak!(weak2, |cb| cb.call(f2(arg))));
-        Stream::new(new_cbs, (self.clone(), other.clone()))
+        Stream::new(new_cbs, Source::stream2(self, other))
     }
 
     /// Accumulates the values sent over this stream.
@@ -261,7 +279,7 @@ impl<T: 'static> Stream<T> {
         let (new_cbs, weak) = arc_and_weak(Callbacks::new());
         self.cbs
             .push(move |arg| with_weak!(weak, |cb| f(arg, Sender::new(cb))));
-        Stream::new(new_cbs, self.clone())
+        Stream::new(new_cbs, Source::stream(self))
     }
 }
 
@@ -373,15 +391,9 @@ where
                 }
             }
         });
-        let source_rc = Arc::new(self.clone());
-        let stream_1 = Stream {
-            cbs: cbs_1,
-            source: source_rc.clone(),
-        };
-        let stream_2 = Stream {
-            cbs: cbs_2,
-            source: source_rc,
-        };
+        let source = Source::stream(self);
+        let stream_1 = Stream::new(cbs_1, source.clone());
+        let stream_2 = Stream::new(cbs_2, source);
         (stream_1, stream_2)
     }
 }
@@ -408,7 +420,7 @@ impl<T: 'static> Stream<Stream<T>> {
             });
             true
         });
-        Stream::new(new_cbs, self.clone())
+        Stream::new(new_cbs, Source::stream(self))
     }
 }
 
