@@ -73,7 +73,7 @@ macro_rules! lift_impl
                 storage: Default::default(),
                 source: ($($vname),+),
                 f: f,
-            })
+            }.wrap())
         }
     );
 }

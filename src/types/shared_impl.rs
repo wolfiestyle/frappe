@@ -20,6 +20,12 @@ pub struct SharedImpl<T, S, F> {
     pub f: F,
 }
 
+impl<T, S, F> SharedImpl<T, S, F> {
+    pub fn wrap(self) -> Arc<Self> {
+        Arc::new(self)
+    }
+}
+
 impl<T, S, F> ops::Deref for SharedImpl<T, S, F> {
     type Target = Storage<T>;
 

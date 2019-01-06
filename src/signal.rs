@@ -55,11 +55,11 @@ impl<T> Signal<T> {
     }
 
     /// Creates a new shared signal.
-    pub(crate) fn shared<S>(storage: S) -> Self
+    pub(crate) fn shared<S>(storage: Arc<S>) -> Self
     where
         S: SharedSignal<T> + Send + Sync + 'static,
     {
-        Signal(Shared(Arc::new(storage)))
+        Signal(Shared(storage))
     }
 
     /// Checks if the signal has changed since the last time it was sampled.
@@ -130,11 +130,14 @@ impl<T> Signal<T> {
                 Signal::from_fn(move || f(sf_()))
             }
             // shared signal: apply f only when the parent signal has changed
-            Shared(ref sig) => Signal::shared(SharedImpl {
-                storage: Storage::inherit(sig.get_storage()),
-                source: sig.clone(),
-                f,
-            }),
+            Shared(ref sig) => Signal::shared(
+                SharedImpl {
+                    storage: Storage::inherit(sig.get_storage()),
+                    source: sig.clone(),
+                    f,
+                }
+                .wrap(),
+            ),
             // nested signal: extract signal, sample and apply f
             Nested(ref sf) => {
                 let sf_ = sf.clone();
@@ -157,13 +160,6 @@ impl<T: Send + 'static> Signal<T> {
         trigger.map(move |b| f(this.lock().sample(), b))
     }
 
-    /// Creates a signal from a shared value.
-    pub(crate) fn from_storage<P: Send + Sync + 'static>(
-        storage: Arc<SharedImpl<T, P, ()>>,
-    ) -> Self {
-        Signal(Shared(storage))
-    }
-
     /// Stores the last value sent to a channel.
     ///
     /// When sampled, the resulting signal consumes all the current values on the channel
@@ -183,11 +179,14 @@ impl<T: Send + 'static> Signal<T> {
         F: Fn(T, V) -> T + Send + Sync + 'static,
         V: Send + 'static,
     {
-        Signal::shared(SharedImpl {
-            storage: Storage::new(initial),
-            source: Mutex::new(rx),
-            f,
-        })
+        Signal::shared(
+            SharedImpl {
+                storage: Storage::new(initial),
+                source: Mutex::new(rx),
+                f,
+            }
+            .wrap(),
+        )
     }
 }
 
@@ -268,8 +267,8 @@ mod tests {
 
     #[test]
     fn signal_shared() {
-        let st = Arc::new(SharedImpl::new(1, ()));
-        let signal = Signal::from_storage(st.clone());
+        let st = SharedImpl::new(1, ()).wrap();
+        let signal = Signal::shared(st.clone());
         let double = signal.map(|a| a * 2);
 
         assert_eq!(signal.sample(), 1);
@@ -308,8 +307,8 @@ mod tests {
         assert_eq!(signal.clone().take(), 33);
         assert_eq!(signal.take(), 33);
 
-        let st = Arc::new(SharedImpl::new(123, ()));
-        let signal = Signal::from_storage(st.clone());
+        let st = SharedImpl::new(123, ()).wrap();
+        let signal = Signal::shared(st.clone());
         assert_eq!(signal.clone().take(), 123);
         assert_eq!(signal.clone().take(), 0);
         st.set(13);

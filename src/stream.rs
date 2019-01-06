@@ -239,7 +239,7 @@ impl<T: 'static> Stream<T> {
             })
         });
 
-        Signal::from_storage(storage)
+        Signal::shared(storage)
     }
 
     /// Folds the stream by cloning the accumulator.
@@ -261,7 +261,7 @@ impl<T: 'static> Stream<T> {
             })
         });
 
-        Signal::from_storage(storage)
+        Signal::shared(storage)
     }
 
     /// Maps each stream event to `0..N` output values.
@@ -316,7 +316,7 @@ impl<T: Clone + Send + 'static> Stream<T> {
             })
         });
 
-        Signal::from_storage(storage)
+        Signal::shared(storage)
     }
 
     /// Creates a channel and sends the stream events through it.
