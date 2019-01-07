@@ -126,8 +126,8 @@ impl<T> Signal<T> {
             Constant(ref val) => Signal::constant(f(val.clone())),
             // dynamic signal: sample and apply f
             Dynamic(ref sf) => {
-                let sf_ = sf.clone();
-                Signal::from_fn(move || f(sf_()))
+                let sf = sf.clone();
+                Signal::from_fn(move || f(sf()))
             }
             // shared signal: apply f only when the parent signal has changed
             Shared(ref sig) => Signal::shared(
@@ -140,8 +140,8 @@ impl<T> Signal<T> {
             ),
             // nested signal: extract signal, sample and apply f
             Nested(ref sf) => {
-                let sf_ = sf.clone();
-                Signal::from_fn(move || f(sf_().sample()))
+                let sf = sf.clone();
+                Signal::from_fn(move || f(sf().sample()))
             }
         }
     }
@@ -218,16 +218,16 @@ impl<T: Clone + 'static> Signal<Signal<T>> {
             // dynamic signal: re-label as nested
             Dynamic(ref f) => Signal(Nested(f.clone())),
             // shared signal: sample to extract the inner signal
-            Shared(ref sig_) => {
-                let sig = sig_.clone();
+            Shared(ref sig) => {
+                let sig = sig.clone();
                 Signal(Nested(Arc::new(move || {
                     sig.update();
                     sig.sample().get()
                 })))
             }
             // nested signal: remove one layer
-            Nested(ref f_) => {
-                let f = f_.clone();
+            Nested(ref f) => {
+                let f = f.clone();
                 Signal(Nested(Arc::new(move || f().sample())))
             }
         }

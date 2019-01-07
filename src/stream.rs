@@ -326,8 +326,8 @@ impl<T: Clone + Send + 'static> Stream<T> {
     pub fn as_channel(&self) -> mpsc::Receiver<T> {
         let (tx, rx) = mpsc::channel();
         //FIXME: it should use one Sender instance per thread but idk how to do it
-        let tx_ = Mutex::new(tx);
-        self.observe(move |arg| tx_.lock().send(arg.into_owned()));
+        let tx = Mutex::new(tx);
+        self.observe(move |arg| tx.lock().send(arg.into_owned()));
         rx
     }
 }
