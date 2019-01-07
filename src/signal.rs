@@ -156,8 +156,27 @@ impl<T: Send + 'static> Signal<T> {
         S: 'static,
         R: 'static,
     {
-        let this = Mutex::new(self.clone()); // need Sync for T
-        trigger.map(move |b| f(this.lock().sample(), b))
+        match self.0 {
+            Constant(ref val) => {
+                let val = Mutex::new(val.clone()); // need Sync for T
+                trigger.map(move |t| f(val.lock().clone(), t))
+            }
+            Dynamic(ref sf) => {
+                let sf = sf.clone();
+                trigger.map(move |t| f(sf(), t))
+            }
+            Shared(ref sig) => {
+                let sig = sig.clone();
+                trigger.map(move |t| {
+                    sig.update();
+                    f(sig.sample().get(), t)
+                })
+            }
+            Nested(ref sf) => {
+                let sf = sf.clone();
+                trigger.map(move |t| f(sf().sample(), t))
+            }
+        }
     }
 
     /// Stores the last value sent to a channel.
