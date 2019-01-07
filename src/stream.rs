@@ -45,10 +45,7 @@ impl<T> Sink<T> {
 
     /// Sends multiple values into the sink.
     #[inline]
-    pub fn feed<I>(&self, iter: I)
-    where
-        I: IntoIterator<Item = T>,
-    {
+    pub fn feed(&self, iter: impl IntoIterator<Item = T>) {
         for val in iter {
             self.cbs.call(val)
         }
@@ -56,10 +53,9 @@ impl<T> Sink<T> {
 
     /// Sends multiple values by reference.
     #[inline]
-    pub fn feed_ref<'a, I>(&self, iter: I)
+    pub fn feed_ref<'a>(&self, iter: impl IntoIterator<Item = &'a T>)
     where
         T: 'a,
-        I: IntoIterator<Item = &'a T>,
     {
         for val in iter {
             self.cbs.call_ref(val)
@@ -462,10 +458,7 @@ impl<T> Sender<T> {
 
     /// Sends multiple values.
     #[inline]
-    pub fn feed<I>(&self, iter: I)
-    where
-        I: IntoIterator<Item = T>,
-    {
+    pub fn feed(&self, iter: impl IntoIterator<Item = T>) {
         self.0.feed(iter)
     }
 }
