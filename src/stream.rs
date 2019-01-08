@@ -479,11 +479,32 @@ mod tests {
 
         sink.send(42);
         sink.send(33);
-        sink.send(&12);
+        sink.send(12);
         sink.feed(0..5);
-        sink.feed(&[11, 22, 33]);
+        sink.feed(vec![11, 22, 33]);
 
         assert_eq!(*result.lock(), [42, 33, 12, 0, 1, 2, 3, 4, 11, 22, 33]);
+    }
+
+    #[test]
+    fn stream_send_ref() {
+        #[derive(Debug, Clone, PartialEq, Eq)]
+        struct Test(i32);
+
+        let sink = Sink::new();
+        let stream = sink.stream();
+        let rx = stream.as_channel();
+
+        {
+            let a = Test(42);
+            let b = [Test(33), Test(-1)];
+            sink.send(&a);
+            sink.feed(&b);
+        }
+
+        assert_eq!(rx.try_recv(), Ok(Test(42)));
+        assert_eq!(rx.try_recv(), Ok(Test(33)));
+        assert_eq!(rx.try_recv(), Ok(Test(-1)));
     }
 
     #[test]
