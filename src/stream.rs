@@ -37,7 +37,7 @@ impl<T> Sink<T> {
     where
         T: 'a,
     {
-        self.cbs.call_dyn(val.into())
+        self.cbs.call(val)
     }
 
     /// Sends multiple values into the sink.
@@ -156,7 +156,7 @@ impl<T: 'static> Stream<T> {
         let (new_cbs, weak) = arc_and_weak(Callbacks::new());
         self.cbs.push(move |arg| {
             with_weak!(weak, |cb| if pred(&arg) {
-                cb.call_dyn(arg)
+                cb.call(arg)
             })
         });
         Stream::new(new_cbs, Source::stream(self))
@@ -182,10 +182,10 @@ impl<T: 'static> Stream<T> {
         let (new_cbs, weak1) = arc_and_weak(Callbacks::new());
         let weak2 = weak1.clone();
         self.cbs
-            .push(move |arg| with_weak!(weak1, |cb| cb.call_dyn(arg)));
+            .push(move |arg| with_weak!(weak1, |cb| cb.call(arg)));
         other
             .cbs
-            .push(move |arg| with_weak!(weak2, |cb| cb.call_dyn(arg)));
+            .push(move |arg| with_weak!(weak2, |cb| cb.call(arg)));
         Stream::new(new_cbs, Source::stream2(self, other))
     }
 
@@ -403,7 +403,7 @@ impl<T: 'static> Stream<Stream<T>> {
                 if my_id != cur_id.load(Ordering::SeqCst) {
                     return false;
                 }
-                with_weak!(cbs_w, |cb| cb.call_dyn(arg))
+                with_weak!(cbs_w, |cb| cb.call(arg))
             });
             true
         });

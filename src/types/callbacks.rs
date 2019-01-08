@@ -77,7 +77,7 @@ impl<T> Callbacks<T> {
     /// Sends an owned value.
     ///
     /// This sends a ref to the first N-1 callbacks, and the owned value to the last.
-    pub fn call(&self, arg: T) {
+    pub fn call_owned(&self, arg: T) {
         let fs = self.fs.read();
         let n = fs.len();
 
@@ -88,7 +88,7 @@ impl<T> Callbacks<T> {
             i += 1;
         }
         if n > 0 {
-            all_alive &= fs[i].call(MaybeOwned::Owned(arg))
+            all_alive &= fs[i].call(MaybeOwned::Owned(arg));
         }
         drop(fs);
 
@@ -111,13 +111,15 @@ impl<T> Callbacks<T> {
         }
     }
 
-    /// Sends a MaybeOwned value.
-    ///
-    /// We use this to passthrough an unprocessed value.
-    pub fn call_dyn(&self, arg: MaybeOwned<'_, T>) {
-        match arg {
+    /// Sends a value.
+    #[inline]
+    pub fn call<'a>(&self, arg: impl Into<MaybeOwned<'a, T>>)
+    where
+        T: 'a,
+    {
+        match arg.into() {
+            MaybeOwned::Owned(v) => self.call_owned(v),
             MaybeOwned::Borrowed(r) => self.call_ref(r),
-            MaybeOwned::Owned(v) => self.call(v),
         }
     }
 
