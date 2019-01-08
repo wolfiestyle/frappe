@@ -28,7 +28,7 @@ fn stream_operations() {
     });
     let s_last_pos = stream.hold_if(0, |a| *a > 0);
 
-    sink.feed_ref(&[5, 8, 13, -2, 42, -33]);
+    sink.feed(&[5, 8, 13, -2, 42, -33]);
 
     assert_eq!(s_string.sample(), ["5", "8", "13", "-2", "42", "-33"]);
     assert_eq!(s_odd.sample(), [5, 13, -33]);
@@ -155,7 +155,7 @@ fn filter_extra() {
     let s_pos = sign_res.filter_first().collect::<Vec<_>>();
     let s_neg = sign_res.filter_second().collect::<Vec<_>>();
 
-    sink.feed_ref(&[1, 8, -3, 42, -66]);
+    sink.feed(vec![1, 8, -3, 42, -66]);
 
     assert_eq!(s_even.sample(), [8, 42, -66]);
     assert_eq!(s_pos.sample(), [1, 8, 42]);
@@ -255,7 +255,7 @@ fn stream_collect() {
     use std::cmp::Ordering;
     use std::collections::*;
 
-    let sink = Sink::new();
+    let sink: Sink<i32> = Sink::new();
     let stream = sink.stream();
     let s_vec: Signal<Vec<_>> = stream.collect();
     let s_vecdq: Signal<VecDeque<_>> = stream.collect();
@@ -263,7 +263,7 @@ fn stream_collect() {
     let s_set: Signal<BTreeSet<_>> = stream.collect();
     let s_string: Signal<String> = stream.map(|v| format!("{} ", v)).collect();
 
-    sink.feed_ref(&[1, 3, -42, 2]);
+    sink.feed(&[1, 3, -42, 2]);
 
     assert_eq!(s_vec.sample(), [1, 3, -42, 2]);
     assert_eq!(s_vecdq.sample(), [1, 3, -42, 2]);

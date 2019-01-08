@@ -33,32 +33,23 @@ impl<T> Sink<T> {
     /// The value will be distributed `N-1` times as reference and then one time by value,
     /// where `N` is the amount of streams connected to this sink.
     #[inline]
-    pub fn send(&self, val: T) {
-        self.cbs.call(val)
-    }
-
-    /// Sends a value by reference.
-    #[inline]
-    pub fn send_ref(&self, val: &T) {
-        self.cbs.call_ref(val)
+    pub fn send<'a>(&self, val: impl Into<MaybeOwned<'a, T>>)
+    where
+        T: 'a,
+    {
+        self.cbs.call_dyn(val.into())
     }
 
     /// Sends multiple values into the sink.
     #[inline]
-    pub fn feed(&self, iter: impl IntoIterator<Item = T>) {
-        for val in iter {
-            self.cbs.call(val)
-        }
-    }
-
-    /// Sends multiple values by reference.
-    #[inline]
-    pub fn feed_ref<'a>(&self, iter: impl IntoIterator<Item = &'a T>)
+    pub fn feed<'a, I, U>(&self, iter: I)
     where
+        I: IntoIterator<Item = U>,
+        U: Into<MaybeOwned<'a, T>>,
         T: 'a,
     {
         for val in iter {
-            self.cbs.call_ref(val)
+            self.send(val)
         }
     }
 }
@@ -488,9 +479,9 @@ mod tests {
 
         sink.send(42);
         sink.send(33);
-        sink.send_ref(&12);
+        sink.send(&12);
         sink.feed(0..5);
-        sink.feed_ref(&[11, 22, 33]);
+        sink.feed(&[11, 22, 33]);
 
         assert_eq!(*result.lock(), [42, 33, 12, 0, 1, 2, 3, 4, 11, 22, 33]);
     }
