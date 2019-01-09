@@ -232,7 +232,7 @@ fn map_n() {
 #[test]
 fn lift() {
     let sink1 = Sink::new();
-    let res = signal_lift!(|a| a + 1, sink1.stream().hold(0));
+    let res = signal_lift!(sink1.stream().hold(0) => |a| a + 1);
 
     assert_eq!(res.sample(), 1);
     sink1.send(12);

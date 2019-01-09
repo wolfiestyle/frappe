@@ -10,41 +10,60 @@ use crate::types::{SharedImpl, SharedSignal, Storage};
 /// calling the supplied function.
 #[macro_export]
 macro_rules! signal_lift {
-    ($($sig:expr),+ => $f:expr) => {
-        signal_lift!($f, $($sig),+)
-    };
-
-    ($f:expr) => {
-        $crate::Signal::from_fn($f)
-    };
-
-    ($f:expr, $sig1:expr) => {
+    ($sig1:expr => $f:expr) => {
         $crate::Signal::map(&$sig1, $f)
     };
 
-    ($f:expr, $sig1:expr, $sig2:expr) => {
-        $crate::lift::lift2($f, $sig1, $sig2)
+    ($sig1:expr, $sig2:expr => $f:expr) => {
+        $crate::lift::lift2(($sig1, $sig2), $f)
     };
 
-    ($f:expr, $sig1:expr, $sig2:expr, $sig3:expr) => {
-        $crate::lift::lift3($f, $sig1, $sig2, $sig3)
+    ($sig1:expr, $sig2:expr, $sig3:expr => $f:expr) => {
+        $crate::lift::lift3(($sig1, $sig2, $sig3), $f)
     };
 
-    ($f:expr, $sig1:expr, $sig2:expr, $sig3:expr, $sig4:expr) => {
-        $crate::lift::lift4($f, $sig1, $sig2, $sig3, $sig4)
+    ($sig1:expr, $sig2:expr, $sig3:expr, $sig4:expr => $f:expr) => {
+        $crate::lift::lift4(($sig1, $sig2, $sig3, $sig4), $f)
     };
 
-    ($f:expr, $sig1:expr, $sig2:expr, $sig3:expr, $sig4:expr, $sig5:expr) => {
-        $crate::lift::lift5($f, $sig1, $sig2, $sig3, $sig4, $sig5)
+    ($sig1:expr, $sig2:expr, $sig3:expr, $sig4:expr, $sig5:expr => $f:expr) => {
+        $crate::lift::lift5(($sig1, $sig2, $sig3, $sig4, $sig5), $f)
     };
 
-    ($f:expr, $sig1:expr, $sig2:expr, $sig3:expr, $sig4:expr, $sig5:expr, $sig6:expr) => {
-        $crate::lift::lift6($f, $sig1, $sig2, $sig3, $sig4, $sig5, $sig6)
+    ($sig1:expr, $sig2:expr, $sig3:expr, $sig4:expr, $sig5:expr, $sig6:expr => $f:expr) => {
+        $crate::lift::lift6(($sig1, $sig2, $sig3, $sig4, $sig5, $sig6), $f)
+    };
+
+    ($sig1:expr, $sig2:expr, $sig3:expr, $sig4:expr, $sig5:expr, $sig6:expr, $sig7:expr => $f:expr) => {
+        $crate::lift::lift7(($sig1, $sig2, $sig3, $sig4, $sig5, $sig6, $sig7), $f)
+    };
+
+    ($sig1:expr, $sig2:expr, $sig3:expr, $sig4:expr, $sig5:expr, $sig6:expr, $sig7:expr, $sig8:expr => $f:expr) => {
+        $crate::lift::lift8(($sig1, $sig2, $sig3, $sig4, $sig5, $sig6, $sig7, $sig8), $f)
+    };
+
+    ($sig1:expr, $sig2:expr, $sig3:expr, $sig4:expr, $sig5:expr, $sig6:expr, $sig7:expr, $sig8:expr, $sig9:expr => $f:expr) => {
+        $crate::lift::lift9(
+            (
+                $sig1, $sig2, $sig3, $sig4, $sig5, $sig6, $sig7, $sig8, $sig9,
+            ),
+            $f,
+        )
+    };
+
+    ($sig1:expr, $sig2:expr, $sig3:expr, $sig4:expr, $sig5:expr, $sig6:expr, $sig7:expr, $sig8:expr, $sig9:expr, $sig10:expr => $f:expr) => {
+        $crate::lift::lift10(
+            (
+                $sig1, $sig2, $sig3, $sig4, $sig5, $sig6, $sig7, $sig8, $sig9, $sig10,
+            ),
+            $f,
+        )
     };
 }
 
+//FIXME: someday we'll have variadic generics..
 macro_rules! lift_impl {
-    ($fname:ident ( $($vname:ident : $tname:ident),+ ) $($idx:tt)+) => (
+    ($fname:ident ( $($tname:ident),+ ) $($idx:tt)+) => {
         impl<T, $($tname,)+ F> SharedSignal<T> for SharedImpl<T, ($(Signal<$tname>),+), F>
         where
             F: Fn($($tname),+) -> T + 'static,
@@ -70,22 +89,27 @@ macro_rules! lift_impl {
         }
 
         /// Lifts a function into a signal.
-        pub fn $fname<T, F, $($tname),+>(f: F, $($vname: Signal<$tname>),+) -> Signal<T>
+        pub fn $fname<T, F, $($tname),+>(source: ($(Signal<$tname>),+), f: F) -> Signal<T>
         where
             F: Fn($($tname),+) -> T + Send + Sync + 'static,
-            T: Send + 'static, $($tname: Clone + Send + Sync + 'static),+
+            $($tname: Clone + Send + Sync + 'static,)+
+            T: Send + 'static,
         {
             Signal::shared(SharedImpl{
                 storage: Default::default(),
-                source: ($($vname),+),
-                f: f,
+                source,
+                f,
             }.wrap())
         }
-    );
+    };
 }
 
-lift_impl!(lift2(s1: S1, s2: S2)                                 0 1);
-lift_impl!(lift3(s1: S1, s2: S2, s3: S3)                         0 1 2);
-lift_impl!(lift4(s1: S1, s2: S2, s3: S3, s4: S4)                 0 1 2 3);
-lift_impl!(lift5(s1: S1, s2: S2, s3: S3, s4: S4, s5: S5)         0 1 2 3 4);
-lift_impl!(lift6(s1: S1, s2: S2, s3: S3, s4: S4, s5: S5, s6: S6) 0 1 2 3 4 5);
+lift_impl!( lift2(S0, S1)                                 0 1);
+lift_impl!( lift3(S0, S1, S2)                             0 1 2);
+lift_impl!( lift4(S0, S1, S2, S3)                         0 1 2 3);
+lift_impl!( lift5(S0, S1, S2, S3, S4)                     0 1 2 3 4);
+lift_impl!( lift6(S0, S1, S2, S3, S4, S5)                 0 1 2 3 4 5);
+lift_impl!( lift7(S0, S1, S2, S3, S4, S5, S6)             0 1 2 3 4 5 6);
+lift_impl!( lift8(S0, S1, S2, S3, S4, S5, S6, S7)         0 1 2 3 4 5 6 7);
+lift_impl!( lift9(S0, S1, S2, S3, S4, S5, S6, S7, S8)     0 1 2 3 4 5 6 7 8);
+lift_impl!(lift10(S0, S1, S2, S3, S4, S5, S6, S7, S8, S9) 0 1 2 3 4 5 6 7 8 9);
