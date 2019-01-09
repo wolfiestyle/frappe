@@ -1,6 +1,6 @@
 [package]
 name = "frappe"
-version = "0.3.1"
+version = "0.4.0"
 authors = ["darkstalker <slayerbeast@gmail.com>"]
 description = "FRP library for Rust"
 documentation = "https://docs.rs/frappe"
@@ -13,7 +13,7 @@ edition = "2018"
 [features]
 
 [dependencies]
-maybe-owned = ">= 0.3.0"
+maybe-owned = "0.3.0"
 either = { version = "1.1.0", optional = true }
 parking_lot = "0.7.1"
 
