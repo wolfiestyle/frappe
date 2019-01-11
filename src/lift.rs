@@ -69,21 +69,13 @@ macro_rules! lift_impl {
             F: Fn($($tname),+) -> T + 'static,
             $($tname: Clone + 'static),+
         {
-            fn update(&self) {
-                if !self.storage.must_update() && ($(self.source.$idx.has_changed())||+) {
-                    self.storage.inc_root();
-                }
-            }
-
             fn get_storage(&self) -> &Storage<T> {
                 &self.storage
             }
 
             fn sample(&self) -> &Storage<T> {
-                if self.storage.must_update() {
-                    let val = (self.f)($(self.source.$idx.sample()),+);
-                    self.storage.set_local(val);
-                }
+                let val = (self.f)($(self.source.$idx.sample()),+);
+                self.storage.set(val);
                 &self.storage
             }
         }

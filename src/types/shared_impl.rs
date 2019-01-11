@@ -5,8 +5,6 @@ use std::sync::{mpsc, Arc};
 
 /// Defines a signal that contains shared storage.
 pub trait SharedSignal<T> {
-    /// Updates the signal.
-    fn update(&self);
     /// Obtains the internal storage.
     fn get_storage(&self) -> &Storage<T>;
     /// Samples the signal.
@@ -35,7 +33,6 @@ impl<T, S, F> ops::Deref for SharedImpl<T, S, F> {
 }
 
 // A signal that contains only storage.
-
 impl<T, S> SharedImpl<T, S, ()> {
     pub fn new(initial: T, source: S) -> Self {
         SharedImpl {
@@ -47,8 +44,6 @@ impl<T, S> SharedImpl<T, S, ()> {
 }
 
 impl<T, S> SharedSignal<T> for SharedImpl<T, S, ()> {
-    fn update(&self) {}
-
     fn get_storage(&self) -> &Storage<T> {
         &self.storage
     }
@@ -59,36 +54,32 @@ impl<T, S> SharedSignal<T> for SharedImpl<T, S, ()> {
 }
 
 // A signal that maps a parent shared signal.
-
 impl<T, P, F> SharedSignal<T> for SharedImpl<T, Arc<dyn SharedSignal<P> + Send + Sync>, F>
 where
     F: Fn(P) -> T + 'static,
     P: Clone,
 {
-    fn update(&self) {
-        self.source.update()
-    }
-
     fn get_storage(&self) -> &Storage<T> {
         &self.storage
     }
 
     fn sample(&self) -> &Storage<T> {
-        if self.storage.must_update() {
-            let res = (self.f)(self.source.sample().get());
-            self.storage.set_local(res);
-        }
+        let res = (self.f)(self.source.sample().get());
+        self.storage.set(res);
         &self.storage
     }
 }
 
 // A signal that folds a channel.
-
 impl<T, S, F> SharedSignal<T> for SharedImpl<T, Mutex<mpsc::Receiver<S>>, F>
 where
     F: Fn(T, S) -> T + 'static,
 {
-    fn update(&self) {
+    fn get_storage(&self) -> &Storage<T> {
+        &self.storage
+    }
+
+    fn sample(&self) -> &Storage<T> {
         let source = self.source.lock();
         if let Ok(first) = source.try_recv() {
             self.storage.replace_with(|old| {
@@ -96,15 +87,6 @@ where
                 source.try_iter().fold(acc, &self.f)
             });
         }
-    }
-
-    fn get_storage(&self) -> &Storage<T> {
-        &self.storage
-    }
-
-    fn sample(&self) -> &Storage<T> {
-        self.update();
-        self.storage.inc_local();
         &self.storage
     }
 }

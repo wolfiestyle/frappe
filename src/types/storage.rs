@@ -1,32 +1,20 @@
 use parking_lot::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
 
 /// Storage cell for shared signal values.
 pub struct Storage<T> {
     val: Mutex<Option<T>>,
     serial: AtomicUsize,
-    root_ser: Arc<AtomicUsize>,
 }
 
 const ERR_EMPTY: &str = "storage empty";
 
 impl<T> Storage<T> {
-    /// Creates a storage with a new root serial.
+    /// Creates a storage with an initial value.
     pub fn new(val: T) -> Self {
         Storage {
             val: Mutex::new(Some(val)),
             serial: AtomicUsize::new(1),
-            root_ser: Arc::new(AtomicUsize::new(1)),
-        }
-    }
-
-    /// Creates a storage with an inherited root serial.
-    pub fn inherit<P>(parent: &Storage<P>) -> Self {
-        Storage {
-            val: Default::default(),
-            serial: Default::default(),
-            root_ser: parent.root_ser.clone(),
         }
     }
 
@@ -38,31 +26,17 @@ impl<T> Storage<T> {
         self.val.lock().clone().expect(ERR_EMPTY)
     }
 
-    /// Sets value and increments the root serial.
-    ///
-    /// This is called by source signals.
+    /// Sets value and increments the serial.
     pub fn set(&self, val: T) {
-        let mut st = self.val.lock();
-        *st = Some(val);
-        self.inc_root();
+        *self.val.lock() = Some(val);
+        self.inc_serial();
     }
 
-    /// Sets value and increments the local serial.
-    ///
-    /// This is called by mapped (child) signals.
-    pub fn set_local(&self, val: T) {
-        let mut st = self.val.lock();
-        *st = Some(val);
-        self.inc_local();
-    }
-
-    /// Replaces the stored value.
+    /// Replaces the stored value and returns the previous one.
     pub fn replace(&self, val: T) -> T {
-        let mut st = self.val.lock();
-        let old = st.take().expect(ERR_EMPTY);
-        *st = Some(val);
-        self.inc_root();
-        old
+        let old = self.val.lock().replace(val);
+        self.inc_serial();
+        old.expect(ERR_EMPTY)
     }
 
     /// Passes the stored value through a function.
@@ -73,32 +47,22 @@ impl<T> Storage<T> {
         let mut st = self.val.lock();
         let old = st.take().expect(ERR_EMPTY);
         *st = Some(f(old));
-        self.inc_root();
+        drop(st);
+        self.inc_serial();
     }
 
-    /// Checks if a parent storage has changed, so this needs update.
-    pub fn must_update(&self) -> bool {
-        self.root_ser.load(Ordering::Relaxed) > self.serial.load(Ordering::Relaxed)
-    }
-
-    /// Increments the serial of a source signal, so child must update.
-    pub fn inc_root(&self) {
-        self.root_ser.fetch_add(1, Ordering::Relaxed);
-    }
-
-    /// Marks this storage as updated.
-    pub fn inc_local(&self) {
-        self.serial
-            .store(self.root_ser.load(Ordering::Relaxed), Ordering::Relaxed);
+    /// Increments the serial of this storage.
+    fn inc_serial(&self) {
+        self.serial.fetch_add(1, Ordering::Release);
     }
 }
 
 impl<T> Default for Storage<T> {
+    /// Creates an empty storage.
     fn default() -> Self {
         Storage {
             val: Default::default(),
             serial: Default::default(),
-            root_ser: Arc::new(AtomicUsize::new(1)),
         }
     }
 }

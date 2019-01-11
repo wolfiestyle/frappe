@@ -288,31 +288,20 @@ fn stream_collect() {
 #[test]
 fn signal_chain() {
     let sink = Sink::new();
-    let eval_count = Arc::new(RwLock::new(0));
-    let ev = eval_count.clone();
 
     let sig_a = sink.stream().hold(0);
-    let sig_b = sig_a.map(move |a| {
-        *ev.write().unwrap() += 1;
-        a + 1
-    });
+    let sig_b = sig_a.map(move |a| a + 1);
     let sig_c = sig_b.map(|a| a * 2);
     let sig_d = sig_c.map(|a| format!("({})", a));
     let sig_e = sig_d.map(|s| s + ".-");
 
-    assert_eq!(sig_e.has_changed(), true);
     assert_eq!(sig_e.sample(), "(2).-");
-    assert_eq!(sig_e.has_changed(), false);
     assert_eq!(sig_e.sample(), "(2).-");
-    assert_eq!(*eval_count.read().unwrap(), 1);
 
     sink.send(42);
 
-    assert_eq!(sig_e.has_changed(), true);
     assert_eq!(sig_e.sample(), "(86).-");
-    assert_eq!(sig_e.has_changed(), false);
     assert_eq!(sig_e.sample(), "(86).-");
-    assert_eq!(*eval_count.read().unwrap(), 2);
 }
 
 #[test]

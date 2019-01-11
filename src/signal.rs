@@ -62,18 +62,6 @@ impl<T> Signal<T> {
         Signal(Shared(storage))
     }
 
-    /// Checks if the signal has changed since the last time it was sampled.
-    pub fn has_changed(&self) -> bool {
-        match self.0 {
-            Constant(_) => false,
-            Dynamic(_) | Nested(_) => true,
-            Shared(ref s) => {
-                s.update();
-                s.get_storage().must_update()
-            }
-        }
-    }
-
     /// Moves the value out of the signal.
     ///
     /// To avoid leaving the internal storage empty (and causing panics), it must be filled with
@@ -86,10 +74,7 @@ impl<T> Signal<T> {
         match self.0 {
             Constant(val) => val,
             Dynamic(f) => f(),
-            Shared(s) => {
-                s.update();
-                s.sample().replace(T::default())
-            }
+            Shared(s) => s.sample().replace(T::default()),
             Nested(f) => f().take(),
         }
     }
@@ -104,10 +89,7 @@ impl<T> Signal<T> {
         match self.0 {
             Constant(ref val) => T::clone(val),
             Dynamic(ref f) => f(),
-            Shared(ref s) => {
-                s.update();
-                s.sample().get()
-            }
+            Shared(ref s) => s.sample().get(),
             Nested(ref f) => f().sample(),
         }
     }
@@ -129,10 +111,10 @@ impl<T> Signal<T> {
                 let sf = sf.clone();
                 Signal::from_fn(move || f(sf()))
             }
-            // shared signal: apply f only when the parent signal has changed
+            // shared signal: create shared storage with source
             Shared(ref sig) => Signal::shared(
                 SharedImpl {
-                    storage: Storage::inherit(sig.get_storage()),
+                    storage: Storage::default(),
                     source: sig.clone(),
                     f,
                 }
@@ -167,10 +149,7 @@ impl<T: Send + 'static> Signal<T> {
             }
             Shared(ref sig) => {
                 let sig = sig.clone();
-                trigger.map(move |t| {
-                    sig.update();
-                    f(sig.sample().get(), t)
-                })
+                trigger.map(move |t| f(sig.sample().get(), t))
             }
             Nested(ref sf) => {
                 let sf = sf.clone();
@@ -220,10 +199,7 @@ impl<T: Clone + 'static> Signal<Signal<T>> {
             // shared signal: sample to extract the inner signal
             Shared(ref sig) => {
                 let sig = sig.clone();
-                Signal(Nested(Arc::new(move || {
-                    sig.update();
-                    sig.sample().get()
-                })))
+                Signal(Nested(Arc::new(move || sig.sample().get())))
             }
             // nested signal: remove one layer
             Nested(ref f) => {
