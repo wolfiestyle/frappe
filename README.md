@@ -1,9 +1,11 @@
 # frappe - FRP library for Rust
 
 Functional Reactive Programming library inspired by [Carboxyl](https://github.com/aepsil0n/carboxyl).
-It's designed to efficiently pass objects around by avoiding cloning as much as possible, and by
-evaluating signals only when changes happen. Threading is now supported (experimental), streams and
-signals can be freely moved and used between threads.
+It's designed to efficiently pass objects around by avoiding cloning as much as possible.
+Threading is now supported (experimental), so streams and signals can be freely moved and used
+between threads.
+
+Work in progress, so the API can change at any time.
 
 [Documentation](https://docs.rs/frappe)
 
