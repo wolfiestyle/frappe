@@ -5,8 +5,6 @@ use std::sync::{mpsc, Arc};
 
 /// Defines a signal that contains shared storage.
 pub trait SharedSignal<T> {
-    /// Obtains the internal storage.
-    fn get_storage(&self) -> &Storage<T>;
     /// Samples the signal.
     fn sample(&self) -> &Storage<T>;
 }
@@ -27,10 +25,6 @@ impl<T, S> SharedStorage<T, S> {
 }
 
 impl<T, S> SharedSignal<T> for SharedStorage<T, S> {
-    fn get_storage(&self) -> &Storage<T> {
-        &self.storage
-    }
-
     fn sample(&self) -> &Storage<T> {
         &self.storage
     }
@@ -66,10 +60,6 @@ where
     F: Fn(S) -> T,
     S: Clone,
 {
-    fn get_storage(&self) -> &Storage<T> {
-        &self.storage
-    }
-
     fn sample(&self) -> &Storage<T> {
         let res = (self.f)(self.source.sample().get());
         self.storage.set(res);
@@ -99,10 +89,6 @@ where
     F: Fn(T, V) -> T,
     S: Fn() -> V,
 {
-    fn get_storage(&self) -> &Storage<T> {
-        &self.storage
-    }
-
     fn sample(&self) -> &Storage<T> {
         let val = (self.source)();
         self.storage.replace_with(|acc| (self.f)(acc, val));
@@ -131,10 +117,6 @@ impl<T, S, F> SharedSignal<T> for SharedChannel<T, S, F>
 where
     F: Fn(T, S) -> T,
 {
-    fn get_storage(&self) -> &Storage<T> {
-        &self.storage
-    }
-
     fn sample(&self) -> &Storage<T> {
         let source = self.source.lock();
         if let Ok(first) = source.try_recv() {
