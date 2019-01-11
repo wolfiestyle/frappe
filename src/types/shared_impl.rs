@@ -77,6 +77,39 @@ where
     }
 }
 
+/// A signal that folds a parent signal.
+pub struct SharedFold<T, S, F> {
+    storage: Storage<T>,
+    source: S,
+    f: F,
+}
+
+impl<T, S, F> SharedFold<T, S, F> {
+    pub fn new(initial: T, f: F, source: S) -> Arc<Self> {
+        Arc::new(SharedFold {
+            storage: Storage::new(initial),
+            source,
+            f,
+        })
+    }
+}
+
+impl<T, S, V, F> SharedSignal<T> for SharedFold<T, S, F>
+where
+    F: Fn(T, V) -> T,
+    S: Fn() -> V,
+{
+    fn get_storage(&self) -> &Storage<T> {
+        &self.storage
+    }
+
+    fn sample(&self) -> &Storage<T> {
+        let val = (self.source)();
+        self.storage.replace_with(|acc| (self.f)(acc, val));
+        &self.storage
+    }
+}
+
 /// A signal that folds a channel.
 pub struct SharedChannel<T, S, F> {
     storage: Storage<T>,

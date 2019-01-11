@@ -1,7 +1,7 @@
 //! Signals are values that discretely change over time.
 
 use crate::stream::Stream;
-use crate::types::{MaybeOwned, SharedChannel, SharedMap, SharedSignal};
+use crate::types::{MaybeOwned, SharedChannel, SharedFold, SharedMap, SharedSignal};
 use parking_lot::Mutex;
 use std::fmt;
 use std::sync::{mpsc, Arc};
@@ -76,6 +76,7 @@ impl<T> Signal<T> {
     /// - `Stream::hold_if`
     /// - `Stream::collect`
     /// - `Stream::fold_channel`
+    /// - `Signal::fold`
     /// - `Signal::from_channel`
     ///
     /// The fold and collect methods will reset their folding after taking their accumulator.
@@ -129,6 +130,35 @@ impl<T> Signal<T> {
             Nested(ref sf) => {
                 let sf = sf.clone();
                 Signal::from_fn(move || f(sf().sample()))
+            }
+        }
+    }
+
+    /// Folds a signal using the provided function.
+    ///
+    /// The folding operation will occur every time the signal is sampled.
+    pub fn fold<A, F>(&self, initial: A, f: F) -> Signal<A>
+    where
+        F: Fn(A, T) -> A + Send + Sync + 'static,
+        T: Clone + Send + 'static,
+        A: Clone + Send + 'static,
+    {
+        match self.0 {
+            Constant(ref val) => {
+                let val = Mutex::new(val.clone()); // need Sync for T
+                Signal::shared(SharedFold::new(initial, f, move || val.lock().clone()))
+            }
+            Dynamic(ref sf) => {
+                let sf = sf.clone();
+                Signal::shared(SharedFold::new(initial, f, move || sf()))
+            }
+            Shared(ref sig) => {
+                let sig = sig.clone();
+                Signal::shared(SharedFold::new(initial, f, move || sig.sample().get()))
+            }
+            Nested(ref sf) => {
+                let sf = sf.clone();
+                Signal::shared(SharedFold::new(initial, f, move || sf().sample()))
             }
         }
     }
@@ -307,5 +337,20 @@ mod tests {
         assert_eq!(signal.clone().take(), 0);
         st.set(13);
         assert_eq!(signal.take(), 13);
+    }
+
+    #[test]
+    fn signal_fold() {
+        let sig1 = Signal::constant(1).fold(0, |a, n| a + n);
+        let sig2 = Signal::from_fn(|| 1).fold(0, |a, n| a + n);
+        let sig3 = Signal::shared(Arc::new(SharedStorage::new(1, ()))).fold(0, |a, n| a + n);
+
+        assert_eq!(sig1.sample(), 1);
+        assert_eq!(sig2.sample(), 1);
+        assert_eq!(sig3.sample(), 1);
+
+        assert_eq!(sig1.sample(), 2);
+        assert_eq!(sig2.sample(), 2);
+        assert_eq!(sig3.sample(), 2);
     }
 }
