@@ -10,6 +10,10 @@ keywords = ["frp", "reactive", "event", "stream", "signal"]
 license = "MIT"
 edition = "2018"
 
+[badges]
+travis-ci = { repository = "darkstalker/frappe" }
+maintenance = { status = "experimental" }
+
 [features]
 
 [dependencies]
