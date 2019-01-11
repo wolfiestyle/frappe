@@ -64,9 +64,23 @@ impl<T> Signal<T> {
 
     /// Moves the value out of the signal.
     ///
+    /// This is meant to be a clone-free alternative to `sample`, but with some drawbacks.
+    /// Taking the value out of a signal can potentially cause unintended results.
     /// To avoid leaving the internal storage empty (and causing panics), it must be filled with
-    /// a default value. This marks the signal chain as changed, so most of time no one will
-    /// notice anything.
+    /// a default value. This default value will only be observed when taking the content of a
+    /// signal created by the methods:
+    ///
+    /// - `Stream::fold`
+    /// - `Stream::fold_clone`
+    /// - `Stream::hold`
+    /// - `Stream::hold_if`
+    /// - `Stream::collect`
+    /// - `Stream::fold_channel`
+    /// - `Signal::from_channel`
+    ///
+    /// The fold and collect methods will reset their folding after taking their accumulator.
+    /// To avoid causing bad effects in those cases, it's recommended to map the signal with the
+    /// identity function just to create a new independant storage.
     pub fn take(self) -> T
     where
         T: Default,
@@ -95,8 +109,6 @@ impl<T> Signal<T> {
     }
 
     /// Maps a signal with the provided function.
-    ///
-    /// The closure is called only when the parent signal changes.
     pub fn map<F, R>(&self, f: F) -> Signal<R>
     where
         F: Fn(T) -> R + Send + Sync + 'static,
@@ -161,7 +173,7 @@ impl<T: Send + 'static> Signal<T> {
     /// Stores the last value sent to a channel.
     ///
     /// When sampled, the resulting signal consumes all the current values on the channel
-    /// (using non-blocking operations) and returns the last value seen.
+    /// (using `try_recv`) and returns the last value seen.
     #[inline]
     pub fn from_channel(initial: T, rx: mpsc::Receiver<T>) -> Self {
         Self::fold_channel(initial, rx, |_, v| v)
@@ -170,7 +182,7 @@ impl<T: Send + 'static> Signal<T> {
     /// Creates a signal that folds the values from a channel.
     ///
     /// When sampled, the resulting signal consumes all the current values on the channel
-    /// (using non-blocking operations) and folds them using the current signal value as the
+    /// (using `try_recv`) and folds them using the current signal value as the
     /// initial accumulator state.
     pub fn fold_channel<V, F>(initial: T, rx: mpsc::Receiver<V>, f: F) -> Self
     where
