@@ -6,6 +6,7 @@ mod helpers;
 mod lift;
 pub mod signal;
 pub mod stream;
+mod sync;
 pub mod types;
 
 pub use crate::signal::Signal;

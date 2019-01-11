@@ -1,4 +1,4 @@
-use parking_lot::Mutex;
+use crate::sync::Mutex;
 
 /// Storage cell for shared signal values.
 pub struct Storage<T> {

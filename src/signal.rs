@@ -1,8 +1,8 @@
 //! Signals are values that discretely change over time.
 
 use crate::stream::Stream;
+use crate::sync::Mutex;
 use crate::types::{MaybeOwned, SharedChannel, SharedFold, SharedMap, SharedSignal};
-use parking_lot::Mutex;
 use std::fmt;
 use std::sync::{mpsc, Arc};
 

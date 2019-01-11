@@ -2,8 +2,8 @@
 
 use crate::helpers::arc_and_weak;
 use crate::signal::Signal;
+use crate::sync::Mutex;
 use crate::types::{Callbacks, MaybeOwned, ObserveResult, SharedStorage, SumType2};
-use parking_lot::Mutex;
 use std::any::Any;
 use std::iter;
 use std::sync::atomic::{AtomicUsize, Ordering};

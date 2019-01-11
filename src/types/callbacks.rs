@@ -1,5 +1,5 @@
+use crate::sync::RwLock;
 use maybe_owned::MaybeOwned;
-use parking_lot::RwLock;
 use std::fmt;
 use std::sync::atomic::{AtomicBool, Ordering};
 

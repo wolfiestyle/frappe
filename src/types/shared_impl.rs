@@ -1,5 +1,5 @@
+use crate::sync::Mutex;
 use crate::types::Storage;
-use parking_lot::Mutex;
 use std::ops;
 use std::sync::{mpsc, Arc};
 
