@@ -63,7 +63,7 @@ impl<T, S, F> SharedMap<T, S, F> {
 
 impl<T, S, F> SharedSignal<T> for SharedMap<T, S, F>
 where
-    F: Fn(S) -> T + 'static,
+    F: Fn(S) -> T,
     S: Clone,
 {
     fn get_storage(&self) -> &Storage<T> {
@@ -129,7 +129,7 @@ impl<T, S, F> SharedChannel<T, S, F> {
 
 impl<T, S, F> SharedSignal<T> for SharedChannel<T, S, F>
 where
-    F: Fn(T, S) -> T + 'static,
+    F: Fn(T, S) -> T,
 {
     fn get_storage(&self) -> &Storage<T> {
         &self.storage
