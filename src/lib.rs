@@ -3,7 +3,7 @@
 
 #[macro_use]
 mod helpers;
-pub mod lift;
+mod lift;
 pub mod signal;
 pub mod stream;
 pub mod types;

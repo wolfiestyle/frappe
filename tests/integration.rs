@@ -1,4 +1,4 @@
-use frappe::{signal_lift, Signal, Sink, Stream};
+use frappe::{Signal, Sink, Stream};
 use std::fmt::Debug;
 use std::sync::{Arc, RwLock};
 
@@ -227,27 +227,6 @@ fn map_n() {
     sink.feed(0..4);
 
     assert_eq!(s_out.sample(), [1, 2, 2, 3, 3, 3]);
-}
-
-#[test]
-fn lift() {
-    let sink1 = Sink::new();
-    let res = signal_lift!(sink1.stream().hold(0) => |a| a + 1);
-
-    assert_eq!(res.sample(), 1);
-    sink1.send(12);
-    assert_eq!(res.sample(), 13);
-
-    let sink2 = Sink::new();
-    let res =
-        signal_lift!(sink1.stream().hold(0), sink2.stream().hold("a") => |a, b| a.to_string() + &b);
-    let mapped = res.map(|s| format!("({})", s));
-
-    assert_eq!(mapped.sample(), "(0a)");
-    sink1.send(42);
-    assert_eq!(mapped.sample(), "(42a)");
-    sink2.send("xyz");
-    assert_eq!(mapped.sample(), "(42xyz)");
 }
 
 #[test]
