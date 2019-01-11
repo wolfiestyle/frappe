@@ -42,6 +42,17 @@ impl<T> Storage<T> {
         let old = st.take().expect(ERR_EMPTY);
         *st = Some(f(old));
     }
+
+    /// A `replace_with` version with cloning.
+    pub fn replace_clone<F>(&self, f: F)
+    where
+        F: FnOnce(T) -> T,
+        T: Clone,
+    {
+        let mut st = self.val.lock();
+        let old = st.clone().expect(ERR_EMPTY);
+        *st = Some(f(old));
+    }
 }
 
 impl<T> Default for Storage<T> {

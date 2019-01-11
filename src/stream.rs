@@ -242,9 +242,7 @@ impl<T: 'static> Stream<T> {
         let (storage, weak) = arc_and_weak(SharedStorage::new(initial, self.clone()));
         self.cbs.push(move |arg| {
             with_weak!(weak, |st| {
-                let old = st.get();
-                let new = f(old, arg);
-                st.set(new);
+                st.replace_clone(|old| f(old, arg));
             })
         });
 
