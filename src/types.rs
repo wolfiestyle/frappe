@@ -11,7 +11,7 @@ mod storage;
 pub(crate) use crate::types::storage::Storage;
 
 mod shared_impl;
-pub(crate) use crate::types::shared_impl::{SharedImpl, SharedSignal};
+pub(crate) use crate::types::shared_impl::*;
 
 /// Generic sum type of two elements.
 ///

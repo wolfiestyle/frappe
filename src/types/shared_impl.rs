@@ -11,39 +11,22 @@ pub trait SharedSignal<T> {
     fn sample(&self) -> &Storage<T>;
 }
 
-/// Common template for shared signal implementations.
-pub struct SharedImpl<T, S, F> {
-    pub storage: Storage<T>,
-    pub source: S,
-    pub f: F,
+/// A signal that contains only storage.
+pub struct SharedStorage<T, S> {
+    storage: Storage<T>,
+    _source: S,
 }
 
-impl<T, S, F> SharedImpl<T, S, F> {
-    pub fn wrap(self) -> Arc<Self> {
-        Arc::new(self)
-    }
-}
-
-impl<T, S, F> ops::Deref for SharedImpl<T, S, F> {
-    type Target = Storage<T>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.storage
-    }
-}
-
-// A signal that contains only storage.
-impl<T, S> SharedImpl<T, S, ()> {
+impl<T, S> SharedStorage<T, S> {
     pub fn new(initial: T, source: S) -> Self {
-        SharedImpl {
+        SharedStorage {
             storage: Storage::new(initial),
-            source,
-            f: (),
+            _source: source,
         }
     }
 }
 
-impl<T, S> SharedSignal<T> for SharedImpl<T, S, ()> {
+impl<T, S> SharedSignal<T> for SharedStorage<T, S> {
     fn get_storage(&self) -> &Storage<T> {
         &self.storage
     }
@@ -53,11 +36,35 @@ impl<T, S> SharedSignal<T> for SharedImpl<T, S, ()> {
     }
 }
 
-// A signal that maps a parent shared signal.
-impl<T, P, F> SharedSignal<T> for SharedImpl<T, Arc<dyn SharedSignal<P> + Send + Sync>, F>
+impl<T, S> ops::Deref for SharedStorage<T, S> {
+    type Target = Storage<T>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.storage
+    }
+}
+
+/// A signal that maps a parent shared signal.
+pub struct SharedMap<T, S, F> {
+    storage: Storage<T>,
+    source: Arc<dyn SharedSignal<S> + Send + Sync>,
+    f: F,
+}
+
+impl<T, S, F> SharedMap<T, S, F> {
+    pub fn new(source: Arc<dyn SharedSignal<S> + Send + Sync>, f: F) -> Arc<Self> {
+        Arc::new(SharedMap {
+            storage: Default::default(),
+            source,
+            f,
+        })
+    }
+}
+
+impl<T, S, F> SharedSignal<T> for SharedMap<T, S, F>
 where
-    F: Fn(P) -> T + 'static,
-    P: Clone,
+    F: Fn(S) -> T + 'static,
+    S: Clone,
 {
     fn get_storage(&self) -> &Storage<T> {
         &self.storage
@@ -70,8 +77,24 @@ where
     }
 }
 
-// A signal that folds a channel.
-impl<T, S, F> SharedSignal<T> for SharedImpl<T, Mutex<mpsc::Receiver<S>>, F>
+/// A signal that folds a channel.
+pub struct SharedChannel<T, S, F> {
+    storage: Storage<T>,
+    source: Mutex<mpsc::Receiver<S>>,
+    f: F,
+}
+
+impl<T, S, F> SharedChannel<T, S, F> {
+    pub fn new(initial: T, rx: mpsc::Receiver<S>, f: F) -> Arc<Self> {
+        Arc::new(SharedChannel {
+            storage: Storage::new(initial),
+            source: Mutex::new(rx),
+            f,
+        })
+    }
+}
+
+impl<T, S, F> SharedSignal<T> for SharedChannel<T, S, F>
 where
     F: Fn(T, S) -> T + 'static,
 {

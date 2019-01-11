@@ -1,7 +1,7 @@
 //! Signals are values that discretely change over time.
 
 use crate::stream::Stream;
-use crate::types::{MaybeOwned, SharedImpl, SharedSignal, Storage};
+use crate::types::{MaybeOwned, SharedChannel, SharedMap, SharedSignal};
 use parking_lot::Mutex;
 use std::fmt;
 use std::sync::{mpsc, Arc};
@@ -124,14 +124,7 @@ impl<T> Signal<T> {
                 Signal::from_fn(move || f(sf()))
             }
             // shared signal: create shared storage with source
-            Shared(ref sig) => Signal::shared(
-                SharedImpl {
-                    storage: Storage::default(),
-                    source: sig.clone(),
-                    f,
-                }
-                .wrap(),
-            ),
+            Shared(ref sig) => Signal::shared(SharedMap::new(sig.clone(), f)),
             // nested signal: extract signal, sample and apply f
             Nested(ref sf) => {
                 let sf = sf.clone();
@@ -189,14 +182,7 @@ impl<T: Send + 'static> Signal<T> {
         F: Fn(T, V) -> T + Send + Sync + 'static,
         V: Send + 'static,
     {
-        Signal::shared(
-            SharedImpl {
-                storage: Storage::new(initial),
-                source: Mutex::new(rx),
-                f,
-            }
-            .wrap(),
-        )
+        Signal::shared(SharedChannel::new(initial, rx, f))
     }
 }
 
@@ -259,6 +245,7 @@ impl<T: fmt::Display + Clone> fmt::Display for Signal<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::SharedStorage;
     use std::sync::RwLock;
     use std::time::Instant;
 
@@ -274,7 +261,7 @@ mod tests {
 
     #[test]
     fn signal_shared() {
-        let st = SharedImpl::new(1, ()).wrap();
+        let st = Arc::new(SharedStorage::new(1, ()));
         let signal = Signal::shared(st.clone());
         let double = signal.map(|a| a * 2);
 
@@ -314,7 +301,7 @@ mod tests {
         assert_eq!(signal.clone().take(), 33);
         assert_eq!(signal.take(), 33);
 
-        let st = SharedImpl::new(123, ()).wrap();
+        let st = Arc::new(SharedStorage::new(123, ()));
         let signal = Signal::shared(st.clone());
         assert_eq!(signal.clone().take(), 123);
         assert_eq!(signal.clone().take(), 0);

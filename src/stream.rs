@@ -2,7 +2,7 @@
 
 use crate::helpers::arc_and_weak;
 use crate::signal::Signal;
-use crate::types::{Callbacks, MaybeOwned, ObserveResult, SharedImpl, SumType2};
+use crate::types::{Callbacks, MaybeOwned, ObserveResult, SharedStorage, SumType2};
 use parking_lot::Mutex;
 use std::any::Any;
 use std::iter;
@@ -219,7 +219,7 @@ impl<T: 'static> Stream<T> {
         F: Fn(A, MaybeOwned<'_, T>) -> A + Send + Sync + 'static,
         A: Send + 'static,
     {
-        let (storage, weak) = arc_and_weak(SharedImpl::new(initial, self.clone()));
+        let (storage, weak) = arc_and_weak(SharedStorage::new(initial, self.clone()));
         self.cbs.push(move |arg| {
             with_weak!(weak, |st| {
                 st.replace_with(|old| f(old, arg));
@@ -239,7 +239,7 @@ impl<T: 'static> Stream<T> {
         F: Fn(A, MaybeOwned<'_, T>) -> A + Send + Sync + 'static,
         A: Clone + Send + 'static,
     {
-        let (storage, weak) = arc_and_weak(SharedImpl::new(initial, self.clone()));
+        let (storage, weak) = arc_and_weak(SharedStorage::new(initial, self.clone()));
         self.cbs.push(move |arg| {
             with_weak!(weak, |st| {
                 let old = st.get();
@@ -296,7 +296,7 @@ impl<T: Clone + Send + 'static> Stream<T> {
     where
         F: Fn(&T) -> bool + Send + Sync + 'static,
     {
-        let (storage, weak) = arc_and_weak(SharedImpl::new(initial, self.clone()));
+        let (storage, weak) = arc_and_weak(SharedStorage::new(initial, self.clone()));
         self.cbs.push(move |arg| {
             with_weak!(weak, |st| if pred(&arg) {
                 st.set(arg.into_owned());
