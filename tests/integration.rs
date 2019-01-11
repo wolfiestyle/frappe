@@ -1,6 +1,4 @@
 use frappe::{Signal, Sink, Stream};
-use std::fmt::Debug;
-use std::sync::{Arc, RwLock};
 
 #[test]
 fn stream_operations() {
@@ -119,6 +117,8 @@ fn signal_switch() {
 
 #[test]
 fn cloning() {
+    use std::fmt::Debug;
+
     #[derive(Debug, Default)]
     struct Storage<T>(Vec<T>);
 
@@ -185,6 +185,8 @@ fn reentrant() {
 #[allow(unused_variables)]
 #[test]
 fn deletion() {
+    use std::sync::{Arc, RwLock};
+
     fn stream_cell(src: &Stream<i32>, i: i32) -> (Stream<i32>, Arc<RwLock<i32>>) {
         let cell = Arc::new(RwLock::new(0));
         let cloned = cell.clone();
