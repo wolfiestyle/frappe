@@ -395,10 +395,10 @@ impl<T: 'static> Stream<Stream<T>> {
             let cbs_w = weak.clone();
             let cur_id = id.clone();
             // increment the id so it will only send to the last stream
-            let my_id = id.fetch_add(1, Ordering::SeqCst) + 1;
+            let my_id = id.fetch_add(1, Ordering::Relaxed) + 1;
             // redirect the inner stream to the output stream
             stream.cbs.push(move |arg| {
-                if my_id != cur_id.load(Ordering::SeqCst) {
+                if my_id != cur_id.load(Ordering::Relaxed) {
                     return false;
                 }
                 with_weak!(cbs_w, |cb| cb.call(arg))
