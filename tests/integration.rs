@@ -68,11 +68,12 @@ fn merge_with() {
 }
 
 #[test]
-fn stream_channel() {
-    use std::sync::mpsc::channel;
+fn signal_channel() {
+    use std::sync::mpsc::{channel, sync_channel};
 
     let sink = Sink::new();
-    let input = sink.stream().as_channel();
+    let (tx, input) = sync_channel(100);
+    sink.stream().observe(move |a| tx.send(*a));
     let (output, result) = channel();
     let s_result = Signal::from_channel(0, result);
 
@@ -81,7 +82,8 @@ fn stream_channel() {
         let stream = sink2.stream();
         let s_sum = stream.fold(0, |a, n| a + *n);
         let doubles = stream.map(|n| *n * 2);
-        let rx_doubles = doubles.as_channel();
+        let (tx, rx_doubles) = sync_channel(100);
+        doubles.observe(move |a| tx.send(*a));
 
         sink2.feed(input);
 

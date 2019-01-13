@@ -308,6 +308,7 @@ impl<T: Clone + Send + 'static> Stream<T> {
     ///
     /// This doesn't create a strong reference to the parent stream, so the channel sender will be dropped
     /// when the stream is deleted.
+    #[deprecated(since = "0.4.1", note = "use `Stream::observe` to send values into a channel")]
     pub fn as_channel(&self) -> mpsc::Receiver<T> {
         let (tx, rx) = mpsc::channel();
         //FIXME: it should use one Sender instance per thread but idk how to do it
@@ -462,18 +463,14 @@ impl<T> Clone for Sender<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::mpsc;
 
     #[test]
     fn stream_basic() {
         let sink = Sink::new();
         let stream = sink.stream();
-
-        let result = {
-            let vec = Arc::new(Mutex::new(Vec::new()));
-            let vec_ = vec.clone();
-            stream.observe(move |a| vec_.lock().push(*a));
-            vec
-        };
+        let (tx, rx) = mpsc::sync_channel(20);
+        stream.observe(move |a| tx.send(*a));
 
         sink.send(42);
         sink.send(33);
@@ -481,7 +478,8 @@ mod tests {
         sink.feed(0..5);
         sink.feed(vec![11, 22, 33]);
 
-        assert_eq!(*result.lock(), [42, 33, 12, 0, 1, 2, 3, 4, 11, 22, 33]);
+        let result: Vec<_> = rx.try_iter().collect();
+        assert_eq!(result, [42, 33, 12, 0, 1, 2, 3, 4, 11, 22, 33]);
     }
 
     #[test]
@@ -489,9 +487,10 @@ mod tests {
         #[derive(Debug, Clone, PartialEq, Eq)]
         struct Test(i32);
 
-        let sink = Sink::new();
+        let sink: Sink<Test> = Sink::new();
         let stream = sink.stream();
-        let rx = stream.as_channel();
+        let (tx, rx) = mpsc::sync_channel(10);
+        stream.observe(move |a| tx.send(a.into_owned()));
 
         {
             let a = Test(42);
@@ -512,7 +511,8 @@ mod tests {
         let sink2 = Sink::new();
 
         let switched = stream_sink.stream().switch();
-        let events = switched.as_channel();
+        let (tx, events) = mpsc::sync_channel(10);
+        switched.observe(move |a| tx.send(*a));
 
         sink1.send(1);
         sink2.send(2);
