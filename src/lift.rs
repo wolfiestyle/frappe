@@ -11,9 +11,35 @@ macro_rules! signal_lift {
         $crate::Signal::map(&$sig, $f)
     };
 
-    ($($sig:expr),+ => $f:expr) => {
-        $crate::Signal::from_fn(move || $f($($crate::Signal::sample(&$sig)),+))
+    ($($sig:expr),+ => | $($args:ident),+ | $body:expr) => {
+        $crate::signal_lift!(@closure $body; $($args)+ ;; $($sig),+)
     };
+
+    ($($sig:expr),+ => $f:expr) => ({
+        let f = $f;
+        $crate::signal_lift!(@expr f;; $($sig),+)
+    });
+
+    (@closure $body:expr ; $($args:ident)* ; $($vars:ident)* ;) => {
+        $crate::Signal::from_fn(move || {
+            let ($($args),*) = ($($crate::Signal::sample(&$vars)),*);
+            $body
+        })
+    };
+
+    (@closure $body:expr ; $($args:ident)* ; $($vars:ident)* ; $sig:expr $(,$stail:expr)*) => ({
+        let sig = $sig;
+        $crate::signal_lift!(@closure $body; $($args)* ; $($vars)* sig ; $($stail),*)
+    });
+
+    (@expr $f:expr ; $($vars:ident)* ;) => {
+        $crate::Signal::from_fn(move || $f($($crate::Signal::sample(&$vars)),*))
+    };
+
+    (@expr $f:expr ; $($vars:ident)* ; $sig:expr $(,$stail:expr)*) => ({
+        let sig = $sig;
+        $crate::signal_lift!(@expr $f ; $($vars)* sig ; $($stail),*)
+    });
 }
 
 #[cfg(test)]
@@ -23,8 +49,7 @@ mod tests {
     #[test]
     fn signal_lift1() {
         let sink = Sink::new();
-        let sig = sink.stream().hold(0);
-        let res: Signal<i32> = signal_lift!(sig => |a| a + 1);
+        let res: Signal<i32> = signal_lift!(sink.stream().hold(0) => |a| a + 1);
 
         assert_eq!(res.sample(), 1);
         sink.send(12);
@@ -32,17 +57,33 @@ mod tests {
     }
 
     #[test]
-    fn signal_lift2() {
+    fn signal_lift2_closure() {
         let sink1 = Sink::new();
         let sink2 = Sink::new();
-        let sig1 = sink1.stream().hold(0);
-        let sig2 = sink2.stream().hold(1);
-        let res: Signal<i32> = signal_lift!(sig1, sig2 => |a, b| a + b);
+        let res: Signal<String> = signal_lift!(sink1.stream().hold(0), sink2.stream().hold("a") => |a, b| a.to_string() + b);
 
-        assert_eq!(res.sample(), 1);
+        assert_eq!(res.sample(), "0a");
         sink1.send(42);
-        assert_eq!(res.sample(), 43);
-        sink2.send(100);
-        assert_eq!(res.sample(), 142);
+        assert_eq!(res.sample(), "42a");
+        sink2.send("xyz");
+        assert_eq!(res.sample(), "42xyz");
+    }
+
+    #[test]
+    fn signal_lift2_expr() {
+        fn append<T: ToString>(a: T, b: &str) -> String {
+            a.to_string() + b
+        }
+
+        let sink1 = Sink::new();
+        let sink2 = Sink::new();
+        let res: Signal<String> =
+            signal_lift!(sink1.stream().hold(0), sink2.stream().hold("a") => append);
+
+        assert_eq!(res.sample(), "0a");
+        sink1.send(42);
+        assert_eq!(res.sample(), "42a");
+        sink2.send("xyz");
+        assert_eq!(res.sample(), "42xyz");
     }
 }
