@@ -308,7 +308,10 @@ impl<T: Clone + Send + 'static> Stream<T> {
     ///
     /// This doesn't create a strong reference to the parent stream, so the channel sender will be dropped
     /// when the stream is deleted.
-    #[deprecated(since = "0.4.1", note = "use `Stream::observe` to send values into a channel")]
+    #[deprecated(
+        since = "0.4.1",
+        note = "use `Stream::observe` to send values into a channel"
+    )]
     pub fn as_channel(&self) -> mpsc::Receiver<T> {
         let (tx, rx) = mpsc::channel();
         //FIXME: it should use one Sender instance per thread but idk how to do it
