@@ -11,8 +11,8 @@ macro_rules! signal_lift {
         $crate::Signal::map(&$sig, $f)
     };
 
-    ($($sig:expr),+ => | $($args:ident),+ | $body:expr) => {
-        $crate::signal_lift!(@closure $body; $($args)+ ;; $($sig),+)
+    ($($sig:expr),+ => | $($args:pat),+ | $body:expr) => {
+        $crate::signal_lift!(@closure $body; $($args)+ ,; $($sig),+)
     };
 
     ($($sig:expr),+ => $f:expr) => ({
@@ -20,16 +20,16 @@ macro_rules! signal_lift {
         $crate::signal_lift!(@expr f;; $($sig),+)
     });
 
-    (@closure $body:expr ; $($args:ident)* ; $($vars:ident)* ;) => {
+    (@closure $body:expr ; $($args:pat)* , $($vars:ident)* ;) => {
         $crate::Signal::from_fn(move || {
             let ($($args),*) = ($($crate::Signal::sample(&$vars)),*);
             $body
         })
     };
 
-    (@closure $body:expr ; $($args:ident)* ; $($vars:ident)* ; $sig:expr $(,$stail:expr)*) => ({
+    (@closure $body:expr ; $($args:pat)* , $($vars:ident)* ; $sig:expr $(,$stail:expr)*) => ({
         let sig = $sig;
-        $crate::signal_lift!(@closure $body; $($args)* ; $($vars)* sig ; $($stail),*)
+        $crate::signal_lift!(@closure $body; $($args)* , $($vars)* sig ; $($stail),*)
     });
 
     (@expr $f:expr ; $($vars:ident)* ;) => {
@@ -85,5 +85,19 @@ mod tests {
         assert_eq!(res.sample(), "42a");
         sink2.send("xyz");
         assert_eq!(res.sample(), "42xyz");
+    }
+
+    #[test]
+    fn signal_lift_pattern() {
+        let sink1 = Sink::new();
+        let sink2 = Sink::new();
+        let sig1 = sink1.stream().hold((0, 1));
+        let sig2 = sink2.stream().hold(2);
+        let res: Signal<String> =
+            signal_lift!(sig1, sig2 => |(a, b), c| a.to_string() + &(b + c).to_string());
+
+        assert_eq!(res.sample(), "03");
+        sink1.send((10, 5));
+        assert_eq!(res.sample(), "107");
     }
 }
