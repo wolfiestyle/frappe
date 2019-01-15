@@ -1,6 +1,6 @@
 [package]
 name = "frappe"
-version = "0.4.0"
+version = "0.4.1"
 authors = ["darkstalker <slayerbeast@gmail.com>"]
 description = "FRP library for Rust"
 documentation = "https://docs.rs/frappe"
@@ -12,7 +12,7 @@ edition = "2018"
 
 [badges]
 travis-ci = { repository = "darkstalker/frappe" }
-maintenance = { status = "experimental" }
+maintenance = { status = "actively-developed" }
 
 [features]
 default = ["either", "parking_lot"]
