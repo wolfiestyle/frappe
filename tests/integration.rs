@@ -67,6 +67,25 @@ fn merge_with() {
     assert_eq!(result.sample(), [Ok(1), Err(2.0), Ok(3), Ok(4), Err(5.0)]);
 }
 
+#[cfg(feature = "either")]
+#[test]
+fn merge_with_either() {
+    let sink1: Sink<i32> = Sink::new();
+    let sink2: Sink<f32> = Sink::new();
+    let stream = sink1
+        .stream()
+        .merge_with_either(&sink2.stream(), |e| e.either(|l| Ok(*l), |r| Err(*r)));
+    let result = stream.collect::<Vec<_>>();
+
+    sink1.send(1);
+    sink2.send(2.0);
+    sink1.send(3);
+    sink1.send(4);
+    sink2.send(5.0);
+
+    assert_eq!(result.sample(), [Ok(1), Err(2.0), Ok(3), Ok(4), Err(5.0)]);
+}
+
 #[test]
 fn signal_channel() {
     use std::sync::mpsc::{channel, sync_channel};

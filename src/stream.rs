@@ -9,6 +9,9 @@ use std::iter;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{mpsc, Arc};
 
+#[cfg(feature = "either")]
+use crate::types::Either;
+
 /// A source of events that feeds the streams connected to it.
 #[derive(Debug)]
 pub struct Sink<T> {
@@ -206,6 +209,23 @@ impl<T: 'static> Stream<T> {
             .cbs
             .push(move |arg| with_weak!(weak2, |cb| cb.call(f2(arg))));
         Stream::new(new_cbs, Source::stream2(self, other))
+    }
+
+    /// Merges two streams of different types using a single function that takes an `Either` argument.
+    #[cfg(feature = "either")]
+    #[inline]
+    pub fn merge_with_either<U, F, R>(&self, other: &Stream<U>, f: F) -> Stream<R>
+    where
+        F: Fn(Either<MaybeOwned<'_, T>, MaybeOwned<'_, U>>) -> R + Clone + Send + Sync + 'static,
+        U: 'static,
+        R: 'static,
+    {
+        let f_ = f.clone();
+        self.merge_with(
+            other,
+            move |a| f(Either::Left(a)),
+            move |b| f_(Either::Right(b)),
+        )
     }
 
     /// Accumulates the values sent over this stream.
