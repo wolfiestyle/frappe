@@ -329,6 +329,20 @@ impl<T: Clone + 'static> Stream<Option<T>> {
     }
 }
 
+impl<T: Clone + 'static, E: Clone + 'static> Stream<Result<T, E>> {
+    /// Filters a stream of `Result`, returning the unwrapped `Ok` values
+    #[inline]
+    pub fn filter_ok(&self) -> Stream<T> {
+        self.filter_first()
+    }
+
+    /// Filters a stream of `Result`, returning the unwrapped `Err` values
+    #[inline]
+    pub fn filter_err(&self) -> Stream<E> {
+        self.filter_second()
+    }
+}
+
 impl<T: SumType2 + Clone + 'static> Stream<T>
 where
     T::Type1: 'static,
