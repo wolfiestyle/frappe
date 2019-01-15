@@ -15,7 +15,7 @@ travis-ci = { repository = "darkstalker/frappe" }
 maintenance = { status = "experimental" }
 
 [features]
-default = ["parking_lot"]
+default = ["either", "parking_lot"]
 
 [dependencies]
 maybe-owned = "0.3.0"

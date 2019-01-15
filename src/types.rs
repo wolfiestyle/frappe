@@ -91,7 +91,7 @@ impl<T, E> SumType2 for Result<T, E> {
 }
 
 #[cfg(feature = "either")]
-impl<L, R> SumType2 for ::either::Either<L, R> {
+impl<L, R> SumType2 for Either<L, R> {
     type Type1 = L;
     type Type2 = R;
 
