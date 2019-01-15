@@ -103,6 +103,7 @@ pub struct Stream<T> {
 }
 
 impl<T> Stream<T> {
+    /// Creates a stream from it's components.
     fn new(cbs: Arc<Callbacks<T>>, source: Source) -> Self {
         Stream { cbs, source }
     }

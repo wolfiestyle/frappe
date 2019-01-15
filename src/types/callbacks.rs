@@ -1,3 +1,5 @@
+//! Callback container for Stream.
+
 use crate::sync::RwLock;
 use maybe_owned::MaybeOwned;
 use std::fmt;
@@ -5,7 +7,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 /// Function that becomes uncallable after it returns false.
 ///
-/// Callbacks use a MaybeOwned<T> argument so we can choose at runtime if we will send a ref or an owned value.
+/// Callbacks use a `MaybeOwned<T>` argument so we can choose at runtime if we will send a ref or an owned value.
 struct FnCell<T> {
     f: Box<dyn Fn(MaybeOwned<'_, T>) -> bool + Send + Sync>,
     alive: AtomicBool,

@@ -1,3 +1,5 @@
+//! Implementation details of Signal.
+
 use crate::sync::Mutex;
 use crate::types::Storage;
 use std::ops;

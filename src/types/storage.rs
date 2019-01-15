@@ -1,3 +1,5 @@
+//! Storage cell used by Signal.
+
 use crate::sync::Mutex;
 
 /// Storage cell for shared signal values.

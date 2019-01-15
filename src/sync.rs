@@ -1,3 +1,5 @@
+//! Module that contains the selected version of Mutex/RwLock.
+
 #[cfg(feature = "parking_lot")]
 pub use parking_lot::{Mutex, RwLock};
 
