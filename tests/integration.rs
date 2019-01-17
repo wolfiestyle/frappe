@@ -372,3 +372,20 @@ fn send_non_sync() {
 
     assert_eq!(sig.sample(), Cell::new(42));
 }
+
+#[test]
+fn stream_send_order() {
+    let sink = Sink::new();
+
+    let stream = sink.stream();
+    stream.observe(|_| false);
+    let result = stream
+        .fold(0, |a, _| a + 1)
+        .snapshot(&stream, |a, _| a)
+        .collect::<Vec<_>>();
+
+    sink.send(());
+    sink.send(());
+    sink.send(());
+    assert_eq!(result.sample(), [1, 2, 3]);
+}

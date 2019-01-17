@@ -128,14 +128,7 @@ impl<T> Callbacks<T> {
     /// Removes the dead callbacks.
     fn cleanup(&self) {
         if let Some(mut fs) = self.fs.try_write() {
-            let mut i = 0;
-            while i < fs.len() {
-                if fs[i].is_alive() {
-                    i += 1;
-                } else {
-                    fs.swap_remove(i);
-                }
-            }
+            fs.retain(FnCell::is_alive);
         }
     }
 }
