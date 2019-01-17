@@ -24,10 +24,6 @@ enum SigValue<T> {
     ///
     /// This is produced by `Signal::from_fn`
     Dynamic(Arc<dyn Fn() -> T + Send + Sync>),
-    /// A signal that contains a signal, and allows sampling the inner signal directly.
-    ///
-    /// This is produced by `Signal::switch`
-    Nested(Arc<dyn Fn() -> Signal<T> + Send + Sync>),
 }
 
 impl<T> Signal<T> {
@@ -72,7 +68,6 @@ impl<T> Signal<T> {
         match self.0 {
             Constant(ref val) => T::clone(val),
             Dynamic(ref f) => f(),
-            Nested(ref f) => f().sample(),
         }
     }
 
@@ -90,11 +85,6 @@ impl<T> Signal<T> {
             Dynamic(ref sf) => {
                 let sf = sf.clone();
                 Signal::from_fn(move || f(sf()))
-            }
-            // nested signal: extract signal, sample and apply f
-            Nested(ref sf) => {
-                let sf = sf.clone();
-                Signal::from_fn(move || f(sf().sample()))
             }
         }
     }
@@ -127,15 +117,6 @@ impl<T> Signal<T> {
                     storage.get()
                 })
             }
-            Nested(ref sf) => {
-                let sf = sf.clone();
-                let storage = Storage::new(initial);
-                Signal::from_fn(move || {
-                    let val = sf().sample();
-                    storage.replace_with(|acc| f(acc, val));
-                    storage.get()
-                })
-            }
         }
     }
 }
@@ -157,10 +138,6 @@ impl<T: Send + 'static> Signal<T> {
             Dynamic(ref sf) => {
                 let sf = sf.clone();
                 trigger.map(move |t| f(sf(), t))
-            }
-            Nested(ref sf) => {
-                let sf = sf.clone();
-                trigger.map(move |t| f(sf().sample(), t))
             }
         }
     }
@@ -209,12 +186,10 @@ impl<T: Clone + 'static> Signal<Signal<T>> {
         match self.0 {
             // constant signal: just extract the inner signal
             Constant(ref sig) => Signal::clone(sig),
-            // dynamic signal: re-label as nested
-            Dynamic(ref f) => Signal(Nested(f.clone())),
-            // nested signal: remove one layer
-            Nested(ref f) => {
+            // dynamic signal: extract the inner signal and sample
+            Dynamic(ref f) => {
                 let f = f.clone();
-                Signal(Nested(Arc::new(move || f().sample())))
+                Signal::from_fn(move || f().sample())
             }
         }
     }
@@ -241,7 +216,6 @@ impl<T: fmt::Debug> fmt::Debug for SigValue<T> {
         match *self {
             Constant(ref val) => write!(f, "Constant({:?})", val),
             Dynamic(ref rf) => write!(f, "Dynamic(Fn@{:p})", rf),
-            Nested(ref rf) => write!(f, "Nested(Fn@{:p})", rf),
         }
     }
 }
