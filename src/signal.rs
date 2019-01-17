@@ -2,7 +2,7 @@
 
 use crate::stream::Stream;
 use crate::sync::Mutex;
-use crate::types::{MaybeOwned, SharedChannel, SharedFold, SharedMap, SharedSignal};
+use crate::types::{MaybeOwned, SharedChannel, SharedFold, SharedSignal};
 use std::fmt;
 use std::sync::{mpsc, Arc};
 
@@ -124,8 +124,11 @@ impl<T> Signal<T> {
                 let sf = sf.clone();
                 Signal::from_fn(move || f(sf()))
             }
-            // shared signal: create shared storage with source
-            Shared(ref sig) => Signal::shared(SharedMap::new(sig.clone(), f)),
+            // shared signal: sample and apply f
+            Shared(ref sig) => {
+                let sig = sig.clone();
+                Signal::from_fn(move || f(sig.sample().get()))
+            }
             // nested signal: extract signal, sample and apply f
             Nested(ref sf) => {
                 let sf = sf.clone();

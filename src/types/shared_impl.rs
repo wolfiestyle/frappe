@@ -40,35 +40,6 @@ impl<T, S> ops::Deref for SharedStorage<T, S> {
     }
 }
 
-/// A signal that maps a parent shared signal.
-pub struct SharedMap<T, S, F> {
-    storage: Storage<T>,
-    source: Arc<dyn SharedSignal<S> + Send + Sync>,
-    f: F,
-}
-
-impl<T, S, F> SharedMap<T, S, F> {
-    pub fn new(source: Arc<dyn SharedSignal<S> + Send + Sync>, f: F) -> Arc<Self> {
-        Arc::new(SharedMap {
-            storage: Default::default(),
-            source,
-            f,
-        })
-    }
-}
-
-impl<T, S, F> SharedSignal<T> for SharedMap<T, S, F>
-where
-    F: Fn(S) -> T,
-    S: Clone,
-{
-    fn sample(&self) -> &Storage<T> {
-        let res = (self.f)(self.source.sample().get());
-        self.storage.set(res);
-        &self.storage
-    }
-}
-
 /// A signal that folds a parent signal.
 pub struct SharedFold<T, S, F> {
     storage: Storage<T>,
