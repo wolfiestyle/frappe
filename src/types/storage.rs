@@ -30,11 +30,6 @@ impl<T> Storage<T> {
         *self.val.lock() = Some(val);
     }
 
-    /// Replaces the stored value and returns the previous one.
-    pub fn replace(&self, val: T) -> T {
-        self.val.lock().replace(val).expect(ERR_EMPTY)
-    }
-
     /// Passes the stored value through a function.
     pub fn replace_with<F>(&self, f: F)
     where

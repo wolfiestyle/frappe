@@ -138,32 +138,36 @@ fn signal_switch() {
 
 #[test]
 fn cloning() {
-    use std::fmt::Debug;
-
-    #[derive(Debug, Default)]
-    struct Storage<T>(Vec<T>);
+    #[derive(Default)]
+    struct Storage<T> {
+        vec: Vec<T>,
+        clone_count: usize,
+    }
 
     impl<T> Storage<T> {
-        fn new() -> Self {
-            Storage(Vec::new())
-        }
         fn push(mut self, a: T) -> Self {
-            self.0.push(a);
+            self.vec.push(a);
             self
         }
     }
 
-    impl<T: Debug> Clone for Storage<T> {
+    impl<T: Clone> Clone for Storage<T> {
         fn clone(&self) -> Self {
-            panic!("storage cloned! {:?}", self.0)
+            Storage {
+                vec: self.vec.clone(),
+                clone_count: self.clone_count + 1,
+            }
         }
     }
 
     let sink = Sink::new();
-    let accum = sink.stream().fold(Storage::new(), |a, v| a.push(*v));
+    let accum = sink.stream().fold(Storage::default(), |a, v| a.push(*v));
 
     sink.feed(0..5);
-    assert_eq!(accum.take().0, [0, 1, 2, 3, 4]);
+
+    let result = accum.sample();
+    assert_eq!(result.vec, [0, 1, 2, 3, 4]);
+    assert_eq!(result.clone_count, 1);
 }
 
 #[test]
@@ -304,21 +308,6 @@ fn signal_chain() {
 
     assert_eq!(sig_e.sample(), "(86).-");
     assert_eq!(sig_e.sample(), "(86).-");
-}
-
-#[test]
-fn signal_take() {
-    #[derive(Debug, Clone, PartialEq, Eq, Default)]
-    struct Value(i32);
-
-    let sink = Sink::new();
-
-    let sig = sink.stream().hold(Value(0)).map(|v| Value(v.0 + 1));
-
-    sink.send(Value(41));
-
-    assert_eq!(sig.clone().take(), Value(42));
-    assert_eq!(sig.take(), Value(42));
 }
 
 #[test]

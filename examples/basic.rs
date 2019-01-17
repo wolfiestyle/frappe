@@ -32,6 +32,5 @@ fn main() {
     println!("last: {}", last.sample());
     // printing a signal samples it
     println!("sum: {}", sum);
-    // `take` moves the value out of the signal
-    println!("half_even: {:?}", half_even.take());
+    println!("half_even: {:?}", half_even);
 }

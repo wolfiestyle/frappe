@@ -26,7 +26,7 @@ enum SigValue<T> {
     Dynamic(Arc<dyn Fn() -> T + Send + Sync>),
     /// A signal that contains shared data.
     ///
-    /// This is mainly produced by stream methods or mapping other signals.
+    /// This is mainly produced by stream methods or folding other signals.
     Shared(Arc<dyn SharedSignal<T> + Send + Sync>),
     /// A signal that contains a signal, and allows sampling the inner signal directly.
     ///
@@ -60,38 +60,6 @@ impl<T> Signal<T> {
         S: SharedSignal<T> + Send + Sync + 'static,
     {
         Signal(Shared(storage))
-    }
-
-    /// Moves the value out of the signal.
-    ///
-    /// This is meant to be a clone-free alternative to `sample`, but with some drawbacks.
-    /// Taking the value out of a signal can potentially cause unintended results.
-    /// To avoid leaving the internal storage empty (and causing panics), it must be filled with
-    /// a default value. This default value will only be observed when taking the content of a
-    /// signal created by the methods:
-    ///
-    /// - `Stream::fold`
-    /// - `Stream::fold_clone`
-    /// - `Stream::hold`
-    /// - `Stream::hold_if`
-    /// - `Stream::collect`
-    /// - `Stream::fold_channel`
-    /// - `Signal::fold`
-    /// - `Signal::from_channel`
-    ///
-    /// The fold and collect methods will reset their folding after taking their accumulator.
-    /// To avoid causing bad effects in those cases, it's recommended to map the signal with the
-    /// identity function just to create a new independant storage.
-    pub fn take(self) -> T
-    where
-        T: Default,
-    {
-        match self.0 {
-            Constant(val) => val,
-            Dynamic(f) => f(),
-            Shared(s) => s.sample().replace(T::default()),
-            Nested(f) => f().take(),
-        }
     }
 
     /// Samples the value of the signal.
@@ -323,23 +291,6 @@ mod tests {
         assert_eq!(signal.sample(), 13);
         assert_eq!(double.sample(), 26);
         assert_eq!(plusone.sample(), 27);
-    }
-
-    #[test]
-    fn signal_take() {
-        let signal = Signal::constant(42);
-        assert_eq!(signal.take(), 42);
-
-        let signal = Signal::from_fn(move || 33);
-        assert_eq!(signal.clone().take(), 33);
-        assert_eq!(signal.take(), 33);
-
-        let st = Arc::new(SharedStorage::new(123, ()));
-        let signal = Signal::shared(st.clone());
-        assert_eq!(signal.clone().take(), 123);
-        assert_eq!(signal.clone().take(), 0);
-        st.set(13);
-        assert_eq!(signal.take(), 13);
     }
 
     #[test]
