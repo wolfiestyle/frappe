@@ -10,9 +10,6 @@ pub(crate) use crate::types::callbacks::Callbacks;
 mod storage;
 pub(crate) use crate::types::storage::Storage;
 
-mod shared_impl;
-pub(crate) use crate::types::shared_impl::*;
-
 /// Generic sum type of two elements.
 ///
 /// It's used to provide generics over the `Option`/`Result`/`Either` types

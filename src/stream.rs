@@ -3,7 +3,7 @@
 use crate::helpers::arc_and_weak;
 use crate::signal::Signal;
 use crate::sync::Mutex;
-use crate::types::{Callbacks, MaybeOwned, ObserveResult, SharedStorage, SumType2};
+use crate::types::{Callbacks, MaybeOwned, ObserveResult, Storage, SumType2};
 use std::any::Any;
 use std::iter;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -238,16 +238,15 @@ impl<T: 'static> Stream<T> {
     pub fn fold<A, F>(&self, initial: A, f: F) -> Signal<A>
     where
         F: Fn(A, MaybeOwned<'_, T>) -> A + Send + Sync + 'static,
-        A: Send + 'static,
+        A: Clone + Send + 'static,
     {
-        let (storage, weak) = arc_and_weak(SharedStorage::new(initial, self.clone()));
+        let (storage, weak) = arc_and_weak(Storage::new(initial));
         self.cbs.push(move |arg| {
             with_weak!(weak, |st| {
                 st.replace_with(|old| f(old, arg));
             })
         });
-
-        Signal::shared(storage)
+        Signal::from_storage(storage, self.clone())
     }
 
     /// Folds the stream by cloning the accumulator.
@@ -260,14 +259,13 @@ impl<T: 'static> Stream<T> {
         F: Fn(A, MaybeOwned<'_, T>) -> A + Send + Sync + 'static,
         A: Clone + Send + 'static,
     {
-        let (storage, weak) = arc_and_weak(SharedStorage::new(initial, self.clone()));
+        let (storage, weak) = arc_and_weak(Storage::new(initial));
         self.cbs.push(move |arg| {
             with_weak!(weak, |st| {
                 st.replace_clone(|old| f(old, arg));
             })
         });
-
-        Signal::shared(storage)
+        Signal::from_storage(storage, self.clone())
     }
 
     /// Maps each stream event to `0..N` output values.
@@ -294,7 +292,7 @@ impl<T: Clone + 'static> Stream<T> {
     #[inline]
     pub fn collect<C>(&self) -> Signal<C>
     where
-        C: Default + Extend<T> + Send + 'static,
+        C: Default + Extend<T> + Clone + Send + 'static,
     {
         self.fold(C::default(), |mut a, v| {
             a.extend(iter::once(v.into_owned()));
@@ -315,14 +313,13 @@ impl<T: Clone + Send + 'static> Stream<T> {
     where
         F: Fn(&T) -> bool + Send + Sync + 'static,
     {
-        let (storage, weak) = arc_and_weak(SharedStorage::new(initial, self.clone()));
+        let (storage, weak) = arc_and_weak(Storage::new(initial));
         self.cbs.push(move |arg| {
             with_weak!(weak, |st| if pred(&arg) {
                 st.set(arg.into_owned());
             })
         });
-
-        Signal::shared(storage)
+        Signal::from_storage(storage, self.clone())
     }
 
     /// Creates a channel and sends the stream events through it.

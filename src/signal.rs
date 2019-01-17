@@ -2,7 +2,7 @@
 
 use crate::stream::Stream;
 use crate::sync::Mutex;
-use crate::types::{MaybeOwned, SharedChannel, SharedFold, SharedSignal};
+use crate::types::{MaybeOwned, Storage};
 use std::fmt;
 use std::sync::{mpsc, Arc};
 
@@ -24,10 +24,6 @@ enum SigValue<T> {
     ///
     /// This is produced by `Signal::from_fn`
     Dynamic(Arc<dyn Fn() -> T + Send + Sync>),
-    /// A signal that contains shared data.
-    ///
-    /// This is mainly produced by stream methods or folding other signals.
-    Shared(Arc<dyn SharedSignal<T> + Send + Sync>),
     /// A signal that contains a signal, and allows sampling the inner signal directly.
     ///
     /// This is produced by `Signal::switch`
@@ -54,12 +50,16 @@ impl<T> Signal<T> {
         Signal(Dynamic(Arc::new(f)))
     }
 
-    /// Creates a new shared signal.
-    pub(crate) fn shared<S>(storage: Arc<S>) -> Self
+    /// Creates a signal from shared storage.
+    pub(crate) fn from_storage<S>(storage: Arc<Storage<T>>, source: S) -> Self
     where
-        S: SharedSignal<T> + Send + Sync + 'static,
+        T: Clone + Send + 'static,
+        S: Send + Sync + 'static,
     {
-        Signal(Shared(storage))
+        Signal::from_fn(move || {
+            let _keepalive = &source;
+            storage.get()
+        })
     }
 
     /// Samples the value of the signal.
@@ -72,7 +72,6 @@ impl<T> Signal<T> {
         match self.0 {
             Constant(ref val) => T::clone(val),
             Dynamic(ref f) => f(),
-            Shared(ref s) => s.sample().get(),
             Nested(ref f) => f().sample(),
         }
     }
@@ -91,11 +90,6 @@ impl<T> Signal<T> {
             Dynamic(ref sf) => {
                 let sf = sf.clone();
                 Signal::from_fn(move || f(sf()))
-            }
-            // shared signal: sample and apply f
-            Shared(ref sig) => {
-                let sig = sig.clone();
-                Signal::from_fn(move || f(sig.sample().get()))
             }
             // nested signal: extract signal, sample and apply f
             Nested(ref sf) => {
@@ -116,20 +110,31 @@ impl<T> Signal<T> {
     {
         match self.0 {
             Constant(ref val) => {
-                let val = Mutex::new(val.clone()); // need Sync for T
-                Signal::shared(SharedFold::new(initial, f, move || val.lock().clone()))
+                let source = Mutex::new(val.clone()); // need Sync for T
+                let storage = Storage::new(initial);
+                Signal::from_fn(move || {
+                    let val = source.lock().clone();
+                    storage.replace_with(|acc| f(acc, val));
+                    storage.get()
+                })
             }
             Dynamic(ref sf) => {
                 let sf = sf.clone();
-                Signal::shared(SharedFold::new(initial, f, move || sf()))
-            }
-            Shared(ref sig) => {
-                let sig = sig.clone();
-                Signal::shared(SharedFold::new(initial, f, move || sig.sample().get()))
+                let storage = Storage::new(initial);
+                Signal::from_fn(move || {
+                    let val = sf();
+                    storage.replace_with(|acc| f(acc, val));
+                    storage.get()
+                })
             }
             Nested(ref sf) => {
                 let sf = sf.clone();
-                Signal::shared(SharedFold::new(initial, f, move || sf().sample()))
+                let storage = Storage::new(initial);
+                Signal::from_fn(move || {
+                    let val = sf().sample();
+                    storage.replace_with(|acc| f(acc, val));
+                    storage.get()
+                })
             }
         }
     }
@@ -153,10 +158,6 @@ impl<T: Send + 'static> Signal<T> {
                 let sf = sf.clone();
                 trigger.map(move |t| f(sf(), t))
             }
-            Shared(ref sig) => {
-                let sig = sig.clone();
-                trigger.map(move |t| f(sig.sample().get(), t))
-            }
             Nested(ref sf) => {
                 let sf = sf.clone();
                 trigger.map(move |t| f(sf().sample(), t))
@@ -169,7 +170,10 @@ impl<T: Send + 'static> Signal<T> {
     /// When sampled, the resulting signal consumes all the current values on the channel
     /// (using `try_recv`) and returns the last value seen.
     #[inline]
-    pub fn from_channel(initial: T, rx: mpsc::Receiver<T>) -> Self {
+    pub fn from_channel(initial: T, rx: mpsc::Receiver<T>) -> Self
+    where
+        T: Clone,
+    {
         Self::fold_channel(initial, rx, |_, v| v)
     }
 
@@ -181,9 +185,21 @@ impl<T: Send + 'static> Signal<T> {
     pub fn fold_channel<V, F>(initial: T, rx: mpsc::Receiver<V>, f: F) -> Self
     where
         F: Fn(T, V) -> T + Send + Sync + 'static,
+        T: Clone,
         V: Send + 'static,
     {
-        Signal::shared(SharedChannel::new(initial, rx, f))
+        let storage = Storage::new(initial);
+        let rx = Mutex::new(rx);
+        Signal::from_fn(move || {
+            let source = rx.lock();
+            if let Ok(first) = source.try_recv() {
+                storage.replace_with(|old| {
+                    let acc = f(old, first);
+                    source.try_iter().fold(acc, &f)
+                });
+            }
+            storage.get()
+        })
     }
 }
 
@@ -195,11 +211,6 @@ impl<T: Clone + 'static> Signal<Signal<T>> {
             Constant(ref sig) => Signal::clone(sig),
             // dynamic signal: re-label as nested
             Dynamic(ref f) => Signal(Nested(f.clone())),
-            // shared signal: sample to extract the inner signal
-            Shared(ref sig) => {
-                let sig = sig.clone();
-                Signal(Nested(Arc::new(move || sig.sample().get())))
-            }
             // nested signal: remove one layer
             Nested(ref f) => {
                 let f = f.clone();
@@ -230,7 +241,6 @@ impl<T: fmt::Debug> fmt::Debug for SigValue<T> {
         match *self {
             Constant(ref val) => write!(f, "Constant({:?})", val),
             Dynamic(ref rf) => write!(f, "Dynamic(Fn@{:p})", rf),
-            Shared(ref rs) => write!(f, "Shared(SharedSignal@{:p})", rs),
             Nested(ref rf) => write!(f, "Nested(Fn@{:p})", rf),
         }
     }
@@ -246,7 +256,6 @@ impl<T: fmt::Display + Clone> fmt::Display for Signal<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::SharedStorage;
     use std::sync::RwLock;
     use std::time::Instant;
 
@@ -258,19 +267,6 @@ mod tests {
         assert_eq!(signal.sample(), 42);
         assert_eq!(double.sample(), 84);
         assert_eq!(plusone.sample(), 85);
-    }
-
-    #[test]
-    fn signal_shared() {
-        let st = Arc::new(SharedStorage::new(1, ()));
-        let signal = Signal::shared(st.clone());
-        let double = signal.map(|a| a * 2);
-
-        assert_eq!(signal.sample(), 1);
-        assert_eq!(double.sample(), 2);
-        st.set(42);
-        assert_eq!(signal.sample(), 42);
-        assert_eq!(double.sample(), 84);
     }
 
     #[test]
@@ -297,15 +293,12 @@ mod tests {
     fn signal_fold() {
         let sig1 = Signal::constant(1).fold(0, |a, n| a + n);
         let sig2 = Signal::from_fn(|| 1).fold(0, |a, n| a + n);
-        let sig3 = Signal::shared(Arc::new(SharedStorage::new(1, ()))).fold(0, |a, n| a + n);
 
         assert_eq!(sig1.sample(), 1);
         assert_eq!(sig2.sample(), 1);
-        assert_eq!(sig3.sample(), 1);
 
         assert_eq!(sig1.sample(), 2);
         assert_eq!(sig2.sample(), 2);
-        assert_eq!(sig3.sample(), 2);
     }
 
     #[test]
