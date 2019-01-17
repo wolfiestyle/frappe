@@ -39,7 +39,7 @@ impl<T> Signal<T> {
     ///
     /// The value is assumed to be constant, so changing it while it's stored on the
     /// signal is a logic error and will cause unexpected results.
-    pub fn constant(val: T) -> Self {
+    pub const fn constant(val: T) -> Self {
         Signal(Constant(val))
     }
 
@@ -355,5 +355,12 @@ mod tests {
         assert_eq!(sig1.sample(), 2);
         assert_eq!(sig2.sample(), 2);
         assert_eq!(sig3.sample(), 2);
+    }
+
+    #[test]
+    fn signal_const() {
+        const THE_ANSWER: Signal<i32> = Signal::constant(42);
+
+        assert_eq!(THE_ANSWER.sample(), 42);
     }
 }
