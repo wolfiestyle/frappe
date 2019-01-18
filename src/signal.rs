@@ -76,7 +76,6 @@ impl<T> Signal<T> {
     where
         F: Fn(T) -> R + Send + Sync + 'static,
         T: Clone + 'static,
-        R: Send + 'static,
     {
         match self.0 {
             // constant signal: apply f once to produce another constant signal
@@ -95,15 +94,15 @@ impl<T> Signal<T> {
     pub fn fold<A, F>(&self, initial: A, f: F) -> Signal<A>
     where
         F: Fn(A, T) -> A + Send + Sync + 'static,
-        T: Clone + Send + 'static,
+        T: Clone + Send + Sync + 'static,
         A: Clone + Send + 'static,
     {
         match self.0 {
             Constant(ref val) => {
-                let source = Mutex::new(val.clone()); // need Sync for T
+                let source = val.clone();
                 let storage = Storage::new(initial);
                 Signal::from_fn(move || {
-                    let val = source.lock().clone();
+                    let val = source.clone();
                     storage.replace_with(|acc| f(acc, val));
                     storage.get()
                 })
@@ -119,21 +118,19 @@ impl<T> Signal<T> {
             }
         }
     }
-}
 
-impl<T: Send + 'static> Signal<T> {
     /// Samples the value of this signal every time the trigger stream fires.
     pub fn snapshot<S, F, R>(&self, trigger: &Stream<S>, f: F) -> Stream<R>
     where
         F: Fn(T, MaybeOwned<'_, S>) -> R + Send + Sync + 'static,
-        T: Clone,
+        T: Clone + Send + Sync + 'static,
         S: 'static,
         R: 'static,
     {
         match self.0 {
             Constant(ref val) => {
-                let val = Mutex::new(val.clone()); // need Sync for T
-                trigger.map(move |t| f(val.lock().clone(), t))
+                let val = val.clone();
+                trigger.map(move |t| f(val.clone(), t))
             }
             Dynamic(ref sf) => {
                 let sf = sf.clone();
@@ -149,7 +146,7 @@ impl<T: Send + 'static> Signal<T> {
     #[inline]
     pub fn from_channel(initial: T, rx: mpsc::Receiver<T>) -> Self
     where
-        T: Clone,
+        T: Clone + Send + 'static,
     {
         Self::fold_channel(initial, rx, |_, v| v)
     }
@@ -162,7 +159,7 @@ impl<T: Send + 'static> Signal<T> {
     pub fn fold_channel<V, F>(initial: T, rx: mpsc::Receiver<V>, f: F) -> Self
     where
         F: Fn(T, V) -> T + Send + Sync + 'static,
-        T: Clone,
+        T: Clone + Send + 'static,
         V: Send + 'static,
     {
         let storage = Storage::new(initial);
