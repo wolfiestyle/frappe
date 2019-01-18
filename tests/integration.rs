@@ -214,10 +214,10 @@ fn deletion() {
 
     fn stream_cell(src: &Stream<i32>, i: i32) -> (Stream<i32>, Arc<RwLock<i32>>) {
         let cell = Arc::new(RwLock::new(0));
-        let cloned = cell.clone();
+        let cell_ = cell.clone();
         let stream = src
             .map(move |n| *n + i)
-            .inspect(move |n| *cloned.write().unwrap() = *n);
+            .inspect(move |n| *cell_.write().unwrap() = *n);
         (stream, cell)
     }
 

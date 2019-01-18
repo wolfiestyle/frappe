@@ -562,4 +562,20 @@ mod tests {
         sink2.send(6);
         assert_eq!(events.try_recv(), Ok(5));
     }
+
+    #[test]
+    fn stream_default() {
+        let sink: Sink<i32> = Default::default();
+        let stream1 = sink.stream();
+        let stream2: Stream<i32> = Default::default();
+        let merged = stream1.merge(&stream2);
+        let (tx, rx) = mpsc::sync_channel(10);
+        merged.observe(move |a| tx.send(*a));
+
+        sink.send(42);
+        sink.send(13);
+
+        assert_eq!(rx.try_recv(), Ok(42));
+        assert_eq!(rx.try_recv(), Ok(13));
+    }
 }

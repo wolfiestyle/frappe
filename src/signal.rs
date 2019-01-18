@@ -227,11 +227,11 @@ impl<T: fmt::Display + Clone> fmt::Display for Signal<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::RwLock;
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::time::Instant;
 
     #[test]
-    fn signal_basic() {
+    fn signal_constant() {
         let signal = Signal::constant(42);
         let double = signal.map(|a| a * 2);
         let plusone = double.map(|a| a + 1);
@@ -246,15 +246,15 @@ mod tests {
         let signal = Signal::from_fn(move || t);
         assert_eq!(signal.sample(), t);
 
-        let n = Arc::new(RwLock::new(1));
-        let cloned = n.clone();
-        let signal = Signal::from_fn(move || *cloned.read().unwrap());
+        let n = Arc::new(AtomicUsize::new(1));
+        let n_ = n.clone();
+        let signal = Signal::from_fn(move || n_.load(Ordering::Relaxed));
         let double = signal.map(|a| a * 2);
         let plusone = double.map(|a| a + 1);
         assert_eq!(signal.sample(), 1);
         assert_eq!(double.sample(), 2);
         assert_eq!(plusone.sample(), 3);
-        *n.write().unwrap() = 13;
+        n.store(13, Ordering::Relaxed);
         assert_eq!(signal.sample(), 13);
         assert_eq!(double.sample(), 26);
         assert_eq!(plusone.sample(), 27);
@@ -277,5 +277,32 @@ mod tests {
         const THE_ANSWER: Signal<i32> = Signal::constant(42);
 
         assert_eq!(THE_ANSWER.sample(), 42);
+    }
+
+    #[test]
+    fn signal_default() {
+        let sig1: Signal<i32> = Default::default();
+        let sig2: Signal<String> = Default::default();
+
+        assert_eq!(sig1.sample(), 0);
+        assert_eq!(sig2.sample(), "");
+    }
+
+    #[test]
+    fn signal_from() {
+        let sig1 = Signal::from(42);
+        let sig2: Signal<i32> = 13.into();
+
+        assert_eq!(sig1.sample(), 42);
+        assert_eq!(sig2.sample(), 13);
+    }
+
+    #[test]
+    fn signal_display() {
+        let sig1 = Signal::constant(42);
+        let sig2 = Signal::from_fn(|| 13);
+
+        assert_eq!(format!("{}", sig1), "42");
+        assert_eq!(format!("{}", sig2), "13");
     }
 }
