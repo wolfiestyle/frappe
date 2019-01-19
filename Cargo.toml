@@ -1,12 +1,12 @@
 [package]
 name = "frappe"
-version = "0.4.1"
+version = "0.4.2"
 authors = ["darkstalker <slayerbeast@gmail.com>"]
-description = "FRP library for Rust"
+description = "Functional Reactive Programming library for Rust"
 documentation = "https://docs.rs/frappe"
 repository = "https://github.com/darkstalker/frappe"
 readme = "README.md"
-keywords = ["frp", "reactive", "event", "stream", "signal"]
+keywords = ["frp", "reactive", "event", "stream", "signal", "concurrency"]
 license = "MIT"
 edition = "2018"
 
