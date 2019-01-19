@@ -5,6 +5,20 @@
 /// This converts a function `Fn(A, B, ...) -> R` and the signals `Signal<A>, Signal<B>, ...`
 /// into a `Signal<R>` that computes it's value by sampling the input signals and then
 /// calling the supplied function.
+///
+/// # Example
+/// ```
+/// use frappe::{Sink, Signal, signal_lift};
+///
+/// let sink = Sink::new();
+/// let sig1 = Signal::from_fn(|| 3);
+/// let sig2 = sig1.map(|x| x + 24);
+///
+/// let lifted = signal_lift!(sig1, sig2, sink.stream().hold(0) => |a, b, c| a + b + c);
+///
+/// sink.send(12);
+/// assert_eq!(lifted.sample(), 42);
+/// ```
 #[macro_export]
 macro_rules! signal_lift {
     ($sig:expr => $f:expr) => {

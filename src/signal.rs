@@ -1,4 +1,29 @@
-//! Signals are values that discretely change over time.
+//! The Signal type.
+//!
+//! Signals are values that discretely change over time. They're basically a wrapper for shared mutable state,
+//! but exposed in a functional way. They can be read using the `Signal::sample` method. Signals do all their
+//! work on the receiver side, so they're "lazy". Operations applied on a signal are applied to the value every
+//! time the signal is sampled.
+//!
+//! Signals are usually constructed by stream operations like `Stream::hold` and `Stream::fold`. They can also
+//! take values from custom function by using `Signal::from_fn`.
+//!
+//! # Example
+//! ```
+//! use frappe::Sink;
+//!
+//! let sink = Sink::new();
+//! let sig1 = sink.stream().fold(0, |a, n| a + *n);
+//! let sig2 = sig1.map(|x| x + 2);
+//!
+//! sink.send(10);
+//! assert_eq!(sig1.sample(), 10);
+//! assert_eq!(sig2.sample(), 12);
+//!
+//! sink.send(30);
+//! assert_eq!(sig1.sample(), 40);
+//! assert_eq!(sig2.sample(), 42);
+//! ```
 
 use crate::stream::Stream;
 use crate::sync::Mutex;
@@ -9,9 +34,6 @@ use std::sync::{mpsc, Arc};
 use self::SigValue::*;
 
 /// Represents a discrete value that changes over time.
-///
-/// Signals are usually constructed by stream operations and can be read using the `sample` or
-/// `take` methods. They update lazily when someone reads them.
 #[derive(Clone, Debug)]
 pub struct Signal<T>(SigValue<T>);
 

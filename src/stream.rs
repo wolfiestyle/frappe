@@ -1,4 +1,34 @@
-//! Streams provide a way to process discrete events sent over time.
+//! The Stream type.
+//!
+//! Streams provide a composable way to handle events that's focused on data instead of callbacks.
+//! You can think of it as a data processing pipeline. Streams do all their work on the sender side, so they're "eager".
+//!
+//! A stream chain begins with a `Sink` that receives the input values, and can send those values to multiple streams.
+//! Operations applied to a `Stream` are applied to all the values that pass through it.
+//! All the objects that result from stream operations contain an internal reference to it's parent,
+//! so dropping intermediate temporary streams (like the ones created from chaining methods) won't break the chain.
+//! The result of a stream chain be viewed with the `Stream::observe` method or stored on a `Signal`.
+//!
+//! This implementation of Stream distributes the data as `MaybeOwned<T>` values to avoid unnecessary cloning,
+//! so the first observers will receive a `MaybeOwned::Borrowed` value, and the last one will receive a
+//! `MaybeOwned::Owned`.
+//!
+//! # Example
+//! ```
+//! use frappe::Sink;
+//!
+//! let sink1 = Sink::new();
+//! let sink2 = Sink::new();
+//! let stream = sink1.stream().map(|x| *x + 1)
+//!             .merge(&sink2.stream().map(|x| *x * 2));
+//! let signal = stream.hold(0);
+//!
+//! sink1.send(10);
+//! assert_eq!(signal.sample(), 11);
+//!
+//! sink2.send(10);
+//! assert_eq!(signal.sample(), 20);
+//! ```
 
 use crate::helpers::arc_and_weak;
 use crate::signal::Signal;
@@ -96,9 +126,6 @@ impl Source {
 }
 
 /// A stream of discrete events sent over time.
-///
-/// All the objects that result from stream operations contain an internal reference to it's parent,
-/// so dropping intermediate temporary streams (like the ones created from chaining methods) won't break the chain.
 #[derive(Debug)]
 pub struct Stream<T> {
     cbs: Arc<Callbacks<T>>,
