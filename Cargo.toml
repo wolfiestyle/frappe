@@ -6,7 +6,7 @@ description = "Functional Reactive Programming library for Rust"
 documentation = "https://docs.rs/frappe"
 repository = "https://github.com/darkstalker/frappe"
 readme = "README.md"
-keywords = ["frp", "reactive", "event", "stream", "signal", "concurrency"]
+keywords = ["frp", "reactive", "event", "stream", "signal"]
 license = "MIT"
 edition = "2018"
 
