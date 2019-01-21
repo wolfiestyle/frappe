@@ -145,13 +145,37 @@ impl<T> Stream<T> {
 
     /// Reads the values from the stream.
     ///
-    /// The value returned by the closure determines the lifetime of this callback.
+    /// The closure will be dropped when it returns a false-y value (see `ObserveResult`) or when
+    /// the source stream is dropped. So you should avoid calling observe as the last step of a
+    /// stream chain.
     pub fn observe<F, R>(&self, f: F)
     where
         F: Fn(MaybeOwned<'_, T>) -> R + Send + Sync + 'static,
         R: ObserveResult,
     {
         self.cbs.push(move |arg| f(arg).is_callback_alive());
+    }
+
+    /// Observes the stream while keeping a reference to it.
+    ///
+    /// This is the same as `Stream::observe`, but it keeps a strong reference to it's source stream,
+    /// so it's safe to call it as the last step of a stream chain. The closure lifetime only depends
+    /// on it's return value.
+    ///
+    /// # Warning
+    /// This creates a cyclic `Arc` reference that can only be broken by the closure signaling it's
+    /// deletion (via `ObserveResult`), so if the closure never unregisters itself it will leak memory.
+    pub fn observe_strong<F, R>(&self, f: F)
+    where
+        F: Fn(MaybeOwned<'_, T>) -> R + Send + Sync + 'static,
+        T: 'static,
+        R: ObserveResult,
+    {
+        let this = self.clone();
+        self.cbs.push(move |arg| {
+            let _keepalive = &this;
+            f(arg).is_callback_alive()
+        });
     }
 
     /// Chainable version of `Stream::observe`
@@ -637,5 +661,26 @@ mod tests {
         sink.send(10);
         assert_eq!(rx.try_recv(), Ok(3));
         assert_eq!(rx.try_recv(), Ok(13));
+    }
+
+    #[test]
+    fn stream_observe_strong() {
+        let sink = Sink::new();
+        let (tx, rx) = mpsc::sync_channel(10);
+        let (arc, weak) = arc_and_weak(Arc::new(()));
+        sink.stream().map(|x| *x * 2).observe_strong(move |x| {
+            let _a = &arc;
+            tx.send(*x)
+        });
+
+        sink.send(6);
+        assert_eq!(rx.try_recv(), Ok(12));
+        assert!(weak.upgrade().is_some());
+
+        drop(rx);
+        sink.send(10);
+        assert_eq!(weak.upgrade(), None);
+        sink.send(42);
+        assert_eq!(sink.cbs.len(), 0);
     }
 }

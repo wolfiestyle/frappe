@@ -131,6 +131,11 @@ impl<T> Callbacks<T> {
             fs.retain(FnCell::is_alive);
         }
     }
+
+    #[cfg(test)]
+    pub(crate) fn len(&self) -> usize {
+        self.fs.read().len()
+    }
 }
 
 impl<T> Default for Callbacks<T> {
