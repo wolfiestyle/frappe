@@ -312,6 +312,24 @@ impl<T: 'static> Stream<T> {
             .push(move |arg| with_weak!(weak, |cb| f(arg, Sender::new(cb))));
         Stream::new(new_cbs, Source::stream(self))
     }
+
+    /// Folds the stream and returns the accumulator values as a stream.
+    ///
+    /// This is the equivalent to doing `stream.fold(initial, f).snapshot(&stream, |a, _| a)`,
+    /// but more efficient.
+    pub fn scan<A, F>(&self, initial: A, f: F) -> Stream<A>
+    where
+        F: Fn(A, MaybeOwned<'_, T>) -> A + Send + Sync + 'static,
+        A: Clone + Send + 'static,
+    {
+        let (new_cbs, weak) = arc_and_weak(Callbacks::new());
+        let storage = Storage::new(initial);
+        self.cbs.push(move |arg| {
+            storage.replace_with(|old| f(old, arg));
+            with_weak!(weak, |cb| cb.call(storage.get()))
+        });
+        Stream::new(new_cbs, Source::stream(self))
+    }
 }
 
 impl<T: Clone + 'static> Stream<T> {
@@ -603,6 +621,21 @@ mod tests {
         sink.send(13);
 
         assert_eq!(rx.try_recv(), Ok(42));
+        assert_eq!(rx.try_recv(), Ok(13));
+    }
+
+    #[test]
+    fn stream_scan() {
+        let sink = Sink::new();
+        let stream = sink.stream().scan(0, |a, n| a + *n);
+        let (tx, rx) = mpsc::sync_channel(10);
+        stream.observe(move |n| tx.send(*n));
+
+        sink.send(1);
+        assert_eq!(rx.try_recv(), Ok(1));
+        sink.send(2);
+        sink.send(10);
+        assert_eq!(rx.try_recv(), Ok(3));
         assert_eq!(rx.try_recv(), Ok(13));
     }
 }
