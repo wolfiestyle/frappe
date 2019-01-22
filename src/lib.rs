@@ -1,4 +1,9 @@
 //! Functional Reactive Programming library for Rust
+//!
+//! Frappe is a concurrent Event-Driven FRP library. It aims to provide a simple, efficient and
+//! Rust-idiomatic way to write interactive applications in a declarative way.
+//!
+//! See each module documentation for more details.
 #![warn(missing_docs)]
 
 #[macro_use]

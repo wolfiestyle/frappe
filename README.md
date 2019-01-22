@@ -2,12 +2,10 @@
 
 [![Build Status](https://travis-ci.org/darkstalker/frappe.svg?branch=master)](https://travis-ci.org/darkstalker/frappe) [![crates.io](https://meritbadge.herokuapp.com/frappe)](https://crates.io/crates/frappe) [![Documentation](https://docs.rs/frappe/badge.svg)](https://docs.rs/frappe)
 
-Functional Reactive Programming library inspired by [Carboxyl](https://github.com/aepsil0n/carboxyl).
-It's designed to efficiently pass objects around by avoiding cloning as much as possible.
-Threading is now supported (experimental), so streams and signals can be freely moved and used
-between threads.
+Frappe is a concurrent Event-Driven FRP library. It aims to provide a simple, efficient and
+Rust-idiomatic way to write interactive applications in a declarative way.
 
-Work in progress, so the API can change at any time.
+*Work in progress, so the API can change at any time.*
 
 ## Usage
 
@@ -49,3 +47,6 @@ fn main() {
     println!("half_even: {:?}", half_even);
 }
 ```
+
+You can also check the [frappe-gtk examples](https://github.com/darkstalker/frappe-gtk/tree/master/examples)
+for more complex usage examples on GUI applications.
