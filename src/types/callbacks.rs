@@ -164,8 +164,7 @@ impl<T> Callbacks<T> {
                 i += 1;
             }
             // run the last callback on current thread
-            let f = &fs[i];
-            if !f.call(MaybeOwned::Borrowed(arg)) {
+            if !fs[i].call(MaybeOwned::Borrowed(arg)) {
                 all_alive.store(false, Ordering::Relaxed);
             }
         })
