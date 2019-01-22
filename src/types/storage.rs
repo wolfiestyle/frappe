@@ -40,6 +40,19 @@ impl<T> Storage<T> {
         *st = Some(f(old));
     }
 
+    /// Same as `replace` but it also returns the new value.
+    pub fn replace_fetch<F>(&self, f: F) -> T
+    where
+        F: FnOnce(T) -> T,
+        T: Clone,
+    {
+        let mut st = self.val.lock();
+        let old = st.take().expect(ERR_EMPTY);
+        let new = f(old);
+        *st = Some(new.clone());
+        new
+    }
+
     /// A `replace` version with cloning.
     pub fn replace_clone<F>(&self, f: F)
     where

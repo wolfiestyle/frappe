@@ -126,8 +126,7 @@ impl<T> Signal<T> {
                 let storage = Storage::new(initial);
                 Signal::from_fn(move || {
                     let val = source.clone();
-                    storage.replace(|acc| f(acc, val));
-                    storage.get()
+                    storage.replace_fetch(|acc| f(acc, val))
                 })
             }
             Dynamic(ref sf) => {
@@ -135,8 +134,7 @@ impl<T> Signal<T> {
                 let storage = Storage::new(initial);
                 Signal::from_fn(move || {
                     let val = sf();
-                    storage.replace(|acc| f(acc, val));
-                    storage.get()
+                    storage.replace_fetch(|acc| f(acc, val))
                 })
             }
         }
