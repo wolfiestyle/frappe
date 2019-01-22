@@ -94,12 +94,13 @@ impl<T> Signal<T> {
     pub fn map<F, R>(&self, f: F) -> Signal<R>
     where
         F: Fn(T) -> R + Send + Sync + 'static,
-        T: Clone + 'static,
+        T: Clone + Send + Sync + 'static,
     {
         match self.0 {
-            // constant signal: apply f once to produce another constant signal
-            Constant(ref val) => Signal::constant(f(val.clone())),
-            // dynamic signal: sample and apply f
+            Constant(ref val) => {
+                let val = val.clone();
+                Signal::from_fn(move || f(val.clone()))
+            }
             Dynamic(ref sf) => {
                 let sf = sf.clone();
                 Signal::from_fn(move || f(sf()))
@@ -260,6 +261,11 @@ mod tests {
         assert_eq!(signal.sample(), 42);
         assert_eq!(double.sample(), 84);
         assert_eq!(plusone.sample(), 85);
+
+        let c = AtomicUsize::new(0);
+        let counter = signal.map(move |a| a + c.fetch_add(1, Ordering::Relaxed));
+        assert_eq!(counter.sample(), 42);
+        assert_eq!(counter.sample(), 43);
     }
 
     #[test]
