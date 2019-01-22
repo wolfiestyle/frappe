@@ -188,12 +188,13 @@ impl<T> Signal<T> {
         Signal::from_fn(move || {
             let source = rx.lock();
             if let Ok(first) = source.try_recv() {
-                storage.replace(|old| {
+                storage.replace_fetch(|old| {
                     let acc = f(old, first);
                     source.try_iter().fold(acc, &f)
-                });
+                })
+            } else {
+                storage.get()
             }
-            storage.get()
         })
     }
 }
