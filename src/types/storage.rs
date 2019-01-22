@@ -30,8 +30,8 @@ impl<T> Storage<T> {
         *self.val.lock() = Some(val);
     }
 
-    /// Passes the stored value through a function.
-    pub fn replace_with<F>(&self, f: F)
+    /// Maps the stored value in place.
+    pub fn replace<F>(&self, f: F)
     where
         F: FnOnce(T) -> T,
     {
@@ -40,7 +40,7 @@ impl<T> Storage<T> {
         *st = Some(f(old));
     }
 
-    /// A `replace_with` version with cloning.
+    /// A `replace` version with cloning.
     pub fn replace_clone<F>(&self, f: F)
     where
         F: FnOnce(T) -> T,

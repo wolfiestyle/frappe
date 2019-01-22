@@ -324,7 +324,7 @@ impl<T: 'static> Stream<T> {
         let (storage, weak) = arc_and_weak(Storage::new(initial));
         self.cbs.push(move |arg| {
             with_weak!(weak, |st| {
-                st.replace_with(|old| f(old, arg));
+                st.replace(|old| f(old, arg));
             })
         });
         Signal::from_storage(storage, self.clone())
@@ -379,7 +379,7 @@ impl<T: 'static> Stream<T> {
         let (new_cbs, weak) = arc_and_weak(Callbacks::new());
         let storage = Storage::new(initial);
         self.cbs.push(move |arg| {
-            storage.replace_with(|old| f(old, arg));
+            storage.replace(|old| f(old, arg));
             with_weak!(weak, |cb| cb.call(storage.get()))
         });
         Stream::new(new_cbs, Source::stream(self))

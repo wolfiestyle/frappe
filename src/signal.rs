@@ -126,7 +126,7 @@ impl<T> Signal<T> {
                 let storage = Storage::new(initial);
                 Signal::from_fn(move || {
                     let val = source.clone();
-                    storage.replace_with(|acc| f(acc, val));
+                    storage.replace(|acc| f(acc, val));
                     storage.get()
                 })
             }
@@ -135,7 +135,7 @@ impl<T> Signal<T> {
                 let storage = Storage::new(initial);
                 Signal::from_fn(move || {
                     let val = sf();
-                    storage.replace_with(|acc| f(acc, val));
+                    storage.replace(|acc| f(acc, val));
                     storage.get()
                 })
             }
@@ -190,7 +190,7 @@ impl<T> Signal<T> {
         Signal::from_fn(move || {
             let source = rx.lock();
             if let Ok(first) = source.try_recv() {
-                storage.replace_with(|old| {
+                storage.replace(|old| {
                     let acc = f(old, first);
                     source.try_iter().fold(acc, &f)
                 });
