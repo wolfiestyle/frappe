@@ -85,6 +85,20 @@ impl<T> Sink<T> {
             self.send(val)
         }
     }
+
+    /// Sends a value using multiple threads.
+    ///
+    /// This sends a value to each of the Sink's observers simultaneously by spawning a thread
+    /// for each one, then it waits for all threads to finish. The value is sent by reference, so
+    /// no cloning is done.
+    #[cfg(feature = "crossbeam-utils")]
+    #[inline]
+    pub fn send_parallel(&self, val: &T)
+    where
+        T: Sync,
+    {
+        self.cbs.call_parallel(val)
+    }
 }
 
 impl<T> Default for Sink<T> {
@@ -682,5 +696,31 @@ mod tests {
         assert_eq!(weak.upgrade(), None);
         sink.send(42);
         assert_eq!(sink.cbs.len(), 0);
+    }
+
+    #[cfg(feature = "crossbeam-utils")]
+    #[test]
+    fn stream_send_parallel() {
+        use std::thread;
+        use std::time::{Duration, Instant};
+
+        let sink = Sink::new();
+        let s1 = sink.stream().map(|x| {
+            thread::sleep(Duration::from_millis(50));
+            *x + 1
+        });
+        let s2 = sink.stream().map(|x| {
+            thread::sleep(Duration::from_millis(50));
+            *x * 2
+        });
+        let result = s1.merge(&s2).fold(0, |a, n| a + *n);
+
+        let t = Instant::now();
+        sink.send_parallel(&10);
+        assert!(t.elapsed() < Duration::from_millis(100));
+        assert_eq!(result.sample(), 31);
+        sink.send_parallel(&1);
+        sink.send_parallel(&13);
+        assert_eq!(result.sample(), 75);
     }
 }

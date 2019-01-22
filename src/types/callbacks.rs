@@ -5,6 +5,9 @@ use maybe_owned::MaybeOwned;
 use std::fmt;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+#[cfg(feature = "crossbeam-utils")]
+use crossbeam_utils::thread;
+
 /// Function that becomes uncallable after it returns false.
 ///
 /// Callbacks use a `MaybeOwned<T>` argument so we can choose at runtime if we will send a ref or an owned value.
@@ -122,6 +125,55 @@ impl<T> Callbacks<T> {
         match arg.into() {
             MaybeOwned::Owned(v) => self.call_owned(v),
             MaybeOwned::Borrowed(r) => self.call_ref(r),
+        }
+    }
+
+    /// Sends a value using multiple threads.
+    #[cfg(feature = "crossbeam-utils")]
+    pub fn call_parallel(&self, arg: &T)
+    where
+        T: Sync,
+    {
+        let fs = self.fs.read();
+        let n = fs.len();
+        // nothing to do
+        if n == 0 {
+            return;
+        }
+        // only 1 callback, just run it on this thread
+        if n == 1 {
+            if !fs[0].call(MaybeOwned::Borrowed(arg)) {
+                self.cleanup();
+            }
+            return;
+        }
+        // 2+ callbacks, we need more threads
+        let all_alive = AtomicBool::new(true);
+        thread::scope(|scope| {
+            let all_alive = &all_alive;
+
+            let mut i = 0;
+            // spawn N-1 threads
+            for _ in 1..n {
+                let f = &fs[i];
+                scope.spawn(move |_| {
+                    if !f.call(MaybeOwned::Borrowed(arg)) {
+                        all_alive.store(false, Ordering::Relaxed);
+                    }
+                });
+                i += 1;
+            }
+            // run the last callback on current thread
+            let f = &fs[i];
+            if !f.call(MaybeOwned::Borrowed(arg)) {
+                all_alive.store(false, Ordering::Relaxed);
+            }
+        })
+        .unwrap();
+        // after all threads finished, continue with the cleanup
+        drop(fs);
+        if all_alive.load(Ordering::Relaxed) {
+            self.cleanup();
         }
     }
 
