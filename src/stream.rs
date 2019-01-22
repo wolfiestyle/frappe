@@ -379,8 +379,8 @@ impl<T: 'static> Stream<T> {
         let (new_cbs, weak) = arc_and_weak(Callbacks::new());
         let storage = Storage::new(initial);
         self.cbs.push(move |arg| {
-            storage.replace(|old| f(old, arg));
-            with_weak!(weak, |cb| cb.call(storage.get()))
+            let new = storage.replace_fetch(|old| f(old, arg));
+            with_weak!(weak, |cb| cb.call(new))
         });
         Stream::new(new_cbs, Source::stream(self))
     }
