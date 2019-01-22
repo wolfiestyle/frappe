@@ -1,12 +1,12 @@
 //! The Signal type.
 //!
-//! Signals are values that discretely change over time. They're basically a wrapper for shared mutable state,
-//! but exposed in a functional way. They can be read using the `Signal::sample` method. Signals do all their
-//! work on the receiver side, so they're "lazy". Operations applied on a signal are applied to the value every
-//! time the signal is sampled.
+//! Signals are values that change over time. They represent shared mutable state, but exposed
+//! in a functional way. The value can be read using the `Signal::sample` method. Signals do all
+//! their work on the receiver side, so they're "lazy". Operations applied on a signal are applied
+//! to the value every time the signal is sampled.
 //!
-//! Signals are usually constructed by stream operations like `Stream::hold` and `Stream::fold`. They can also
-//! take values from custom function by using `Signal::from_fn`.
+//! Signals are usually constructed by stream operations like `Stream::hold` and `Stream::fold`.
+//! They can also take values from a custom function by using `Signal::from_fn`.
 //!
 //! # Example
 //! ```
@@ -33,7 +33,7 @@ use std::sync::{mpsc, Arc};
 
 use self::SigValue::*;
 
-/// Represents a discrete value that changes over time.
+/// Represents a value that changes over time.
 #[derive(Clone, Debug)]
 pub struct Signal<T>(SigValue<T>);
 
@@ -50,17 +50,11 @@ enum SigValue<T> {
 
 impl<T> Signal<T> {
     /// Creates a signal with constant value.
-    ///
-    /// The value is assumed to be constant, so changing it while it's stored on the
-    /// signal is a logic error and will cause unexpected results.
     pub const fn constant(val: T) -> Self {
         Signal(Constant(val))
     }
 
     /// Creates a signal that samples it's values from an external source.
-    ///
-    /// The closure is meant to sample a continuous value from the real world,
-    /// so the signal value is assumed to be always changing.
     pub fn from_fn<F>(f: F) -> Self
     where
         F: Fn() -> T + Send + Sync + 'static,
@@ -82,7 +76,8 @@ impl<T> Signal<T> {
 
     /// Samples the value of the signal.
     ///
-    /// This will clone the value stored in the signal.
+    /// The action of sampling pulls the value through the signal chain until it finds it's source,
+    /// clones it if necessary, and then transforms it into the result value.
     pub fn sample(&self) -> T
     where
         T: Clone,
@@ -93,7 +88,9 @@ impl<T> Signal<T> {
         }
     }
 
-    /// Maps a signal with the provided function.
+    /// Maps a signal using the provided function.
+    ///
+    /// The map operation applies the function to the signal value every time it's sampled.
     pub fn map<F, R>(&self, f: F) -> Signal<R>
     where
         F: Fn(T) -> R + Send + Sync + 'static,
@@ -112,7 +109,10 @@ impl<T> Signal<T> {
 
     /// Folds a signal using the provided function.
     ///
-    /// The folding operation will occur every time the signal is sampled.
+    /// The fold operation applies a `Fn(A, T) -> A` function on the signal every time it's sampled,
+    /// where `A` is the current accumulator value and `T` is the value of the input signal.
+    /// The result of this call is stored on the accumulator and returned as the output signal's
+    /// value.
     pub fn fold<A, F>(&self, initial: A, f: F) -> Signal<A>
     where
         F: Fn(A, T) -> A + Send + Sync + 'static,

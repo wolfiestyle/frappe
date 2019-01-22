@@ -1,17 +1,21 @@
 //! The Stream type.
 //!
 //! Streams provide a composable way to handle events that's focused on data instead of callbacks.
-//! You can think of it as a data processing pipeline. Streams do all their work on the sender side, so they're "eager".
+//! You can think of it as a data processing pipeline. Streams do all their work on the sender side,
+//! so they're "eager".
 //!
-//! A stream chain begins with a `Sink` that receives the input values, and can send those values to multiple streams.
-//! Operations applied to a `Stream` are applied to all the values that pass through it.
+//! A stream chain begins with a `Sink` that receives the input values and can send those values to
+//! multiple streams. Operations applied to a `Stream` are applied to all the values that pass
+//! through it. The result of a stream chain be viewed with the `Stream::observe` method or stored
+//! on a `Signal`.
 //! All the objects that result from stream operations contain an internal reference to it's parent,
-//! so dropping intermediate temporary streams (like the ones created from chaining methods) won't break the chain.
-//! The result of a stream chain be viewed with the `Stream::observe` method or stored on a `Signal`.
+//! so dropping intermediate temporary streams (like the ones created from chaining methods) won't
+//! break the chain.
 //!
-//! This implementation of Stream distributes the data as `MaybeOwned<T>` values to avoid unnecessary cloning,
-//! so the first observers will receive a `MaybeOwned::Borrowed` value, and the last one will receive a
-//! `MaybeOwned::Owned`.
+//! This implementation of Stream distributes the data as `MaybeOwned<T>` values to avoid
+//! unnecessary cloning, so the first observers will receive a `MaybeOwned::Borrowed` value, and the
+//! last one will receive a`MaybeOwned::Owned`. This also allows sending values as a reference with
+//! an arbitrary lifetime, not just `&'static` refs.
 //!
 //! # Example
 //! ```
@@ -88,9 +92,9 @@ impl<T> Sink<T> {
 
     /// Sends a value using multiple threads.
     ///
-    /// This sends a value to each of the Sink's observers simultaneously by spawning a thread
-    /// for each one, then it waits for all threads to finish. The value is sent by reference, so
-    /// no cloning is done.
+    /// This method sends a value to each of the Sink's connected streams simultaneously by spawning
+    /// a thread for each one, then it waits for all threads to finish. The value is sent by
+    /// reference, so no cloning is done.
     #[cfg(feature = "crossbeam-utils")]
     #[inline]
     pub fn send_parallel(&self, val: &T)
@@ -159,9 +163,12 @@ impl<T> Stream<T> {
 
     /// Reads the values from the stream.
     ///
+    /// This method registers a callback that will be called every time a stream event is received.
+    /// It is meant to be used as a debugging tool or as a way to interface with imperative code.
+    ///
     /// The closure will be dropped when it returns a false-y value (see `ObserveResult`) or when
-    /// the source stream is dropped. So you should avoid calling observe as the last step of a
-    /// stream chain.
+    /// the source stream is dropped, so you should avoid calling `Stream::observe` as the last
+    /// step of a stream chain.
     pub fn observe<F, R>(&self, f: F)
     where
         F: Fn(MaybeOwned<'_, T>) -> R + Send + Sync + 'static,
@@ -192,9 +199,7 @@ impl<T> Stream<T> {
         });
     }
 
-    /// Chainable version of `Stream::observe`
-    ///
-    /// This is a convenience function meant to be used as a debugging tool.
+    /// Chainable version of `Stream::observe`.
     #[inline]
     pub fn inspect<F, R>(self, f: F) -> Self
     where
@@ -208,6 +213,8 @@ impl<T> Stream<T> {
 
 impl<T: 'static> Stream<T> {
     /// Maps this stream into another stream using the provided function.
+    ///
+    /// The closure will be called every time a stream event is received.
     #[inline]
     pub fn map<F, R>(&self, f: F) -> Stream<R>
     where
@@ -231,7 +238,9 @@ impl<T: 'static> Stream<T> {
         Stream::new(new_cbs, Source::stream(self))
     }
 
-    /// Filter and map a stream simultaneously.
+    /// Does filter and map on a stream simultaneously.
+    ///
+    /// The output stream will only contain the unwrapped `Some` values returned by the closure.
     pub fn filter_map<F, R>(&self, f: F) -> Stream<R>
     where
         F: Fn(MaybeOwned<'_, T>) -> Option<R> + Send + Sync + 'static,
@@ -258,7 +267,11 @@ impl<T: 'static> Stream<T> {
         Stream::new(new_cbs, Source::stream2(self, other))
     }
 
-    /// Merges two streams of different types using two functions that return the same type.
+    /// Merges two streams of different types using two functions.
+    ///
+    /// The first function will be called when receiving events on `self`, and the second one
+    /// when receiving events from `other`. Their combined values will be used to form a
+    /// stream of a single type.
     pub fn merge_with<U, F1, F2, R>(&self, other: &Stream<U>, f1: F1, f2: F2) -> Stream<R>
     where
         F1: Fn(MaybeOwned<'_, T>) -> R + Send + Sync + 'static,
@@ -277,6 +290,9 @@ impl<T: 'static> Stream<T> {
     }
 
     /// Merges two streams of different types using a single function that takes an `Either` argument.
+    ///
+    /// Events from `self` will produce an `Either::Left`, and events from `other` will produce
+    /// an `Either::Right`.
     #[cfg(feature = "either")]
     #[inline]
     pub fn merge_with_either<U, F, R>(&self, other: &Stream<U>, f: F) -> Stream<R>
@@ -316,9 +332,9 @@ impl<T: 'static> Stream<T> {
 
     /// Folds the stream by cloning the accumulator.
     ///
-    /// This will clone the accumulator on every value processed, but if the closure panics, the
-    /// storage will remain unchanged and later attempts at sampling will succeed like nothing
-    /// happened.
+    /// This does the same as `Stream::fold` but it will clone the accumulator on every value
+    /// processed. If the closure panics, the storage will remain unchanged and later attempts at
+    /// sampling will succeed like nothing happened.
     pub fn fold_clone<A, F>(&self, initial: A, f: F) -> Signal<A>
     where
         F: Fn(A, MaybeOwned<'_, T>) -> A + Send + Sync + 'static,
@@ -335,11 +351,11 @@ impl<T: 'static> Stream<T> {
 
     /// Maps each stream event to `0..N` output values.
     ///
-    /// The closure must return its value by sending it through the provided Sender.
-    /// Multiple values (or none) can be sent to the output stream this way.
+    /// On every stream event received the closure must return its value by sending it through the
+    /// provided Sender. Multiple values (or none) can be sent to the output stream this way.
     ///
-    /// This primitive is useful to construct asynchronous operations, since you can
-    /// store the Sender and use it when the data is ready.
+    /// This primitive is useful to construct asynchronous operations, since you can store the
+    /// Sender and then use it when the data is ready.
     pub fn map_n<F, R>(&self, f: F) -> Stream<R>
     where
         F: Fn(MaybeOwned<'_, T>, Sender<R>) + Send + Sync + 'static,
@@ -353,7 +369,7 @@ impl<T: 'static> Stream<T> {
 
     /// Folds the stream and returns the accumulator values as a stream.
     ///
-    /// This is the equivalent to doing `stream.fold(initial, f).snapshot(&stream, |a, _| a)`,
+    /// This is the equivalent of doing `stream.fold(initial, f).snapshot(&stream, |a, _| a)`,
     /// but more efficient.
     pub fn scan<A, F>(&self, initial: A, f: F) -> Stream<A>
     where
@@ -371,7 +387,7 @@ impl<T: 'static> Stream<T> {
 }
 
 impl<T: Clone + 'static> Stream<T> {
-    /// Creates a collection from the values of this stream.
+    /// Creates a collection from the values sent to this stream.
     #[inline]
     pub fn collect<C>(&self) -> Signal<C>
     where
@@ -407,8 +423,8 @@ impl<T: Clone + Send + 'static> Stream<T> {
 
     /// Creates a channel and sends the stream events through it.
     ///
-    /// This doesn't create a strong reference to the parent stream, so the channel sender will be dropped
-    /// when the stream is deleted.
+    /// This doesn't create a strong reference to the parent stream, so the channel sender will be
+    /// dropped when the stream is deleted.
     #[deprecated(
         since = "0.4.1",
         note = "use `Stream::observe` to send values into a channel"
@@ -423,7 +439,7 @@ impl<T: Clone + Send + 'static> Stream<T> {
 }
 
 impl<T: Clone + 'static> Stream<Option<T>> {
-    /// Filters a stream of `Option`, returning the unwrapped `Some` values
+    /// Filters a stream of `Option`, returning only the unwrapped `Some` values.
     #[inline]
     pub fn filter_some(&self) -> Stream<T> {
         self.filter_first()
@@ -431,13 +447,13 @@ impl<T: Clone + 'static> Stream<Option<T>> {
 }
 
 impl<T: Clone + 'static, E: Clone + 'static> Stream<Result<T, E>> {
-    /// Filters a stream of `Result`, returning the unwrapped `Ok` values
+    /// Filters a stream of `Result`, returning only the unwrapped `Ok` values.
     #[inline]
     pub fn filter_ok(&self) -> Stream<T> {
         self.filter_first()
     }
 
-    /// Filters a stream of `Result`, returning the unwrapped `Err` values
+    /// Filters a stream of `Result`, returning only the unwrapped `Err` values.
     #[inline]
     pub fn filter_err(&self) -> Stream<E> {
         self.filter_second()
@@ -449,7 +465,7 @@ where
     T::Type1: 'static,
     T::Type2: 'static,
 {
-    /// Creates a stream with only the first element of a sum type
+    /// Creates a stream with only the first element of a sum type.
     pub fn filter_first(&self) -> Stream<T::Type1> {
         self.filter_map(|res| {
             if res.is_type1() {
@@ -460,7 +476,7 @@ where
         })
     }
 
-    /// Creates a stream with only the second element of a sum type
+    /// Creates a stream with only the second element of a sum type.
     pub fn filter_second(&self) -> Stream<T::Type2> {
         self.filter_map(|res| {
             if res.is_type2() {
@@ -471,7 +487,7 @@ where
         })
     }
 
-    /// Splits a two element sum type stream into two streams with the unwrapped values
+    /// Splits a two element sum type stream into two streams with the unwrapped values.
     pub fn split(&self) -> (Stream<T::Type1>, Stream<T::Type2>) {
         let (cbs_1, weak_1) = arc_and_weak(Callbacks::new());
         let (cbs_2, weak_2) = arc_and_weak(Callbacks::new());
@@ -503,7 +519,7 @@ where
 }
 
 impl<T: 'static> Stream<Stream<T>> {
-    /// Listens to the events from the last stream sent to a nested stream
+    /// Listens to the events from the last stream sent to a nested stream.
     pub fn switch(&self) -> Stream<T> {
         let (new_cbs, weak) = arc_and_weak(Callbacks::new());
         let id = Arc::new(AtomicUsize::new(0)); // id of each stream sent
