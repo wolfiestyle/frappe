@@ -54,7 +54,7 @@ impl<T> Signal<T> {
     /// Creates a signal from shared storage.
     pub(crate) fn from_storage<S>(storage: Arc<Storage<T>>, source: S) -> Self
     where
-        T: Clone + Send + 'static,
+        T: Clone + Send + Sync + 'static,
         S: Send + Sync + 'static,
     {
         Signal::from_fn(move || {
@@ -93,7 +93,7 @@ impl<T> Signal<T> {
     where
         F: Fn(A, T) -> A + Send + Sync + 'static,
         T: 'static,
-        A: Clone + Send + 'static,
+        A: Clone + Send + Sync + 'static,
     {
         let this = self.clone();
         let storage = Storage::new(initial);
@@ -122,7 +122,7 @@ impl<T> Signal<T> {
     #[inline]
     pub fn from_channel(initial: T, rx: mpsc::Receiver<T>) -> Self
     where
-        T: Clone + Send + 'static,
+        T: Clone + Send + Sync + 'static,
     {
         Self::fold_channel(initial, rx, |_, v| v)
     }
@@ -135,7 +135,7 @@ impl<T> Signal<T> {
     pub fn fold_channel<V, F>(initial: T, rx: mpsc::Receiver<V>, f: F) -> Self
     where
         F: Fn(T, V) -> T + Send + Sync + 'static,
-        T: Clone + Send + 'static,
+        T: Clone + Send + Sync + 'static,
         V: Send + 'static,
     {
         let storage = Storage::new(initial);

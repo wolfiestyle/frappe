@@ -347,22 +347,6 @@ fn stream_threading() {
 }
 
 #[test]
-fn send_non_sync() {
-    use std::cell::Cell;
-
-    let sink: Sink<Cell<_>> = Sink::new();
-    let sig = sink
-        .stream()
-        .map(|x| Cell::new(x.get() * 2))
-        .hold(Default::default())
-        .map(|x| Cell::new(x.get() + 2));
-
-    sink.send(Cell::new(20));
-
-    assert_eq!(sig.sample(), Cell::new(42));
-}
-
-#[test]
 fn stream_send_order() {
     let sink = Sink::new();
 

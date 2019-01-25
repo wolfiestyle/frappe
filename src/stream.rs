@@ -318,7 +318,7 @@ impl<T: 'static> Stream<T> {
     pub fn fold<A, F>(&self, initial: A, f: F) -> Signal<A>
     where
         F: Fn(A, MaybeOwned<'_, T>) -> A + Send + Sync + 'static,
-        A: Clone + Send + 'static,
+        A: Clone + Send + Sync + 'static,
     {
         let (storage, weak) = arc_and_weak(Storage::new(initial));
         self.cbs.push(move |arg| {
@@ -337,7 +337,7 @@ impl<T: 'static> Stream<T> {
     pub fn fold_clone<A, F>(&self, initial: A, f: F) -> Signal<A>
     where
         F: Fn(A, MaybeOwned<'_, T>) -> A + Send + Sync + 'static,
-        A: Clone + Send + 'static,
+        A: Clone + Send + Sync + 'static,
     {
         let (storage, weak) = arc_and_weak(Storage::new(initial));
         self.cbs.push(move |arg| {
@@ -373,7 +373,7 @@ impl<T: 'static> Stream<T> {
     pub fn scan<A, F>(&self, initial: A, f: F) -> Stream<A>
     where
         F: Fn(A, MaybeOwned<'_, T>) -> A + Send + Sync + 'static,
-        A: Clone + Send + 'static,
+        A: Clone + Send + Sync + 'static,
     {
         let (new_cbs, weak) = arc_and_weak(Callbacks::new());
         let storage = Storage::new(initial);
@@ -390,19 +390,20 @@ impl<T: Clone + 'static> Stream<T> {
     #[inline]
     pub fn collect<C>(&self) -> Signal<C>
     where
-        C: Default + Extend<T> + Clone + Send + 'static,
+        C: Default + Extend<T> + Clone + Send + Sync + 'static,
     {
         self.fold(C::default(), |mut a, v| {
             a.extend(Some(v.into_owned()));
             a
         })
     }
-}
 
-impl<T: Clone + Send + 'static> Stream<T> {
     /// Creates a Signal that holds the last value sent to this stream.
     #[inline]
-    pub fn hold(&self, initial: T) -> Signal<T> {
+    pub fn hold(&self, initial: T) -> Signal<T>
+    where
+        T: Send + Sync,
+    {
         self.hold_if(initial, |_| true)
     }
 
@@ -410,6 +411,7 @@ impl<T: Clone + Send + 'static> Stream<T> {
     pub fn hold_if<F>(&self, initial: T, pred: F) -> Signal<T>
     where
         F: Fn(&T) -> bool + Send + Sync + 'static,
+        T: Send + Sync,
     {
         let (storage, weak) = arc_and_weak(Storage::new(initial));
         self.cbs.push(move |arg| {
@@ -428,7 +430,10 @@ impl<T: Clone + Send + 'static> Stream<T> {
         since = "0.4.1",
         note = "use `Stream::observe` to send values into a channel"
     )]
-    pub fn as_channel(&self) -> mpsc::Receiver<T> {
+    pub fn as_channel(&self) -> mpsc::Receiver<T>
+    where
+        T: Send,
+    {
         let (tx, rx) = mpsc::channel();
         //FIXME: it should use one Sender instance per thread but idk how to do it
         let tx = Mutex::new(tx);

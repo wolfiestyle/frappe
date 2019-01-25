@@ -1,10 +1,10 @@
 //! Storage cell used by Signal.
 
-use crate::sync::Mutex;
+use crate::sync::RwLock;
 
 /// Storage cell for shared signal values.
 pub struct Storage<T> {
-    val: Mutex<Option<T>>,
+    val: RwLock<Option<T>>,
 }
 
 const ERR_EMPTY: &str = "storage empty";
@@ -13,7 +13,7 @@ impl<T> Storage<T> {
     /// Creates a storage with an initial value.
     pub fn new(val: T) -> Self {
         Storage {
-            val: Mutex::new(Some(val)),
+            val: RwLock::new(Some(val)),
         }
     }
 
@@ -22,12 +22,12 @@ impl<T> Storage<T> {
     where
         T: Clone,
     {
-        self.val.lock().clone().expect(ERR_EMPTY)
+        self.val.read().clone().expect(ERR_EMPTY)
     }
 
     /// Sets the value.
     pub fn set(&self, val: T) {
-        *self.val.lock() = Some(val);
+        *self.val.write() = Some(val);
     }
 
     /// Maps the stored value in place.
@@ -35,7 +35,7 @@ impl<T> Storage<T> {
     where
         F: FnOnce(T) -> T,
     {
-        let mut st = self.val.lock();
+        let mut st = self.val.write();
         let old = st.take().expect(ERR_EMPTY);
         *st = Some(f(old));
     }
@@ -46,7 +46,7 @@ impl<T> Storage<T> {
         F: FnOnce(T) -> T,
         T: Clone,
     {
-        let mut st = self.val.lock();
+        let mut st = self.val.write();
         let old = st.take().expect(ERR_EMPTY);
         let new = f(old);
         *st = Some(new.clone());
@@ -59,7 +59,7 @@ impl<T> Storage<T> {
         F: FnOnce(T) -> T,
         T: Clone,
     {
-        let mut st = self.val.lock();
+        let mut st = self.val.write();
         let old = st.clone().expect(ERR_EMPTY);
         *st = Some(f(old));
     }
