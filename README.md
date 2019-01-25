@@ -31,7 +31,8 @@ fn main() {
         .fold(Vec::new(), |mut vec, n| {
             vec.push(*n);
             vec
-        }); // note: .collect::<Vec<_>>() does the same
+        }) // note: .collect::<Vec<_>>() does the same
+        .map(|v| format!("{:?}", v));
 
     // we can send individual values
     sink.send(6);
@@ -44,7 +45,7 @@ fn main() {
     println!("last: {}", last.sample());
     // printing a signal samples it
     println!("sum: {}", sum);
-    println!("half_even: {:?}", half_even);
+    println!("half_even: {}", half_even);
 }
 ```
 
