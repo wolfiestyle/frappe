@@ -39,7 +39,6 @@ use crate::signal::Signal;
 use crate::sync::Mutex;
 use crate::types::{Callbacks, MaybeOwned, ObserveResult, Storage, SumType2};
 use std::any::Any;
-use std::iter;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{mpsc, Arc};
 
@@ -394,7 +393,7 @@ impl<T: Clone + 'static> Stream<T> {
         C: Default + Extend<T> + Clone + Send + 'static,
     {
         self.fold(C::default(), |mut a, v| {
-            a.extend(iter::once(v.into_owned()));
+            a.extend(Some(v.into_owned()));
             a
         })
     }
