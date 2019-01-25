@@ -353,8 +353,9 @@ fn send_non_sync() {
     let sink: Sink<Cell<_>> = Sink::new();
     let sig = sink
         .stream()
-        .map(|x| Cell::new(x.get() * 2 + 2))
-        .hold(Default::default());
+        .map(|x| Cell::new(x.get() * 2))
+        .hold(Default::default())
+        .map(|x| Cell::new(x.get() + 2));
 
     sink.send(Cell::new(20));
 

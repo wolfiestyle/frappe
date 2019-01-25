@@ -31,27 +31,16 @@ use crate::types::{MaybeOwned, Storage};
 use std::fmt;
 use std::sync::{mpsc, Arc};
 
-use self::SigValue::*;
-
 /// Represents a value that changes over time.
-#[derive(Clone, Debug)]
-pub struct Signal<T>(SigValue<T>);
-
-/// The content source of a signal.
-#[derive(Clone)]
-enum SigValue<T> {
-    /// A signal with constant value.
-    Constant(T),
-    /// A signal that generates it's values from a function.
-    ///
-    /// This is produced by `Signal::from_fn`
-    Dynamic(Arc<dyn Fn() -> T + Send + Sync>),
-}
+pub struct Signal<T>(Arc<dyn Fn() -> T + Send + Sync>);
 
 impl<T> Signal<T> {
     /// Creates a signal with constant value.
-    pub const fn constant(val: T) -> Self {
-        Signal(Constant(val))
+    pub fn constant(val: T) -> Self
+    where
+        T: Clone + Send + Sync + 'static,
+    {
+        Signal::from_fn(move || val.clone())
     }
 
     /// Creates a signal that samples it's values from an external source.
@@ -59,7 +48,7 @@ impl<T> Signal<T> {
     where
         F: Fn() -> T + Send + Sync + 'static,
     {
-        Signal(Dynamic(Arc::new(f)))
+        Signal(Arc::new(f))
     }
 
     /// Creates a signal from shared storage.
@@ -78,14 +67,8 @@ impl<T> Signal<T> {
     ///
     /// The action of sampling pulls the value through the signal chain until it finds it's source,
     /// clones it if necessary, and then transforms it into the result value.
-    pub fn sample(&self) -> T
-    where
-        T: Clone,
-    {
-        match self.0 {
-            Constant(ref val) => T::clone(val),
-            Dynamic(ref f) => f(),
-        }
+    pub fn sample(&self) -> T {
+        self.0()
     }
 
     /// Maps a signal using the provided function.
@@ -94,18 +77,10 @@ impl<T> Signal<T> {
     pub fn map<F, R>(&self, f: F) -> Signal<R>
     where
         F: Fn(T) -> R + Send + Sync + 'static,
-        T: Clone + Send + Sync + 'static,
+        T: 'static,
     {
-        match self.0 {
-            Constant(ref val) => {
-                let val = val.clone();
-                Signal::from_fn(move || f(val.clone()))
-            }
-            Dynamic(ref sf) => {
-                let sf = sf.clone();
-                Signal::from_fn(move || f(sf()))
-            }
-        }
+        let this = self.clone();
+        Signal::from_fn(move || f(this.sample()))
     }
 
     /// Folds a signal using the provided function.
@@ -117,47 +92,27 @@ impl<T> Signal<T> {
     pub fn fold<A, F>(&self, initial: A, f: F) -> Signal<A>
     where
         F: Fn(A, T) -> A + Send + Sync + 'static,
-        T: Clone + Send + Sync + 'static,
+        T: 'static,
         A: Clone + Send + 'static,
     {
-        match self.0 {
-            Constant(ref val) => {
-                let source = val.clone();
-                let storage = Storage::new(initial);
-                Signal::from_fn(move || {
-                    let val = source.clone();
-                    storage.replace_fetch(|acc| f(acc, val))
-                })
-            }
-            Dynamic(ref sf) => {
-                let sf = sf.clone();
-                let storage = Storage::new(initial);
-                Signal::from_fn(move || {
-                    let val = sf();
-                    storage.replace_fetch(|acc| f(acc, val))
-                })
-            }
-        }
+        let this = self.clone();
+        let storage = Storage::new(initial);
+        Signal::from_fn(move || {
+            let val = this.sample();
+            storage.replace_fetch(|acc| f(acc, val))
+        })
     }
 
     /// Samples the value of this signal every time the trigger stream fires.
     pub fn snapshot<S, F, R>(&self, trigger: &Stream<S>, f: F) -> Stream<R>
     where
         F: Fn(T, MaybeOwned<'_, S>) -> R + Send + Sync + 'static,
-        T: Clone + Send + Sync + 'static,
+        T: 'static,
         S: 'static,
         R: 'static,
     {
-        match self.0 {
-            Constant(ref val) => {
-                let val = val.clone();
-                trigger.map(move |t| f(val.clone(), t))
-            }
-            Dynamic(ref sf) => {
-                let sf = sf.clone();
-                trigger.map(move |t| f(sf(), t))
-            }
-        }
+        let this = self.clone();
+        trigger.map(move |t| f(this.sample(), t))
     }
 
     /// Stores the last value sent to a channel.
@@ -199,30 +154,30 @@ impl<T> Signal<T> {
     }
 }
 
-impl<T: Clone + 'static> Signal<Signal<T>> {
+impl<T: 'static> Signal<Signal<T>> {
     /// Creates a new signal that samples the inner value of a nested signal.
     pub fn switch(&self) -> Signal<T> {
-        match self.0 {
-            // constant signal: just extract the inner signal
-            Constant(ref sig) => Signal::clone(sig),
-            // dynamic signal: extract the inner signal and sample
-            Dynamic(ref f) => {
-                let f = f.clone();
-                Signal::from_fn(move || f().sample())
-            }
-        }
+        let this = self.clone();
+        Signal::from_fn(move || this.sample().sample())
     }
 }
 
-impl<T: Default> Default for Signal<T> {
+impl<T> Clone for Signal<T> {
+    /// Creates a new signal that references the same value.
+    fn clone(&self) -> Self {
+        Signal(self.0.clone())
+    }
+}
+
+impl<T: Default + 'static> Default for Signal<T> {
     /// Creates a constant signal with T's default value.
     #[inline]
     fn default() -> Self {
-        Signal::constant(T::default())
+        Signal::from_fn(T::default)
     }
 }
 
-impl<T> From<T> for Signal<T> {
+impl<T: Clone + Send + Sync + 'static> From<T> for Signal<T> {
     /// Creates a constant signal from T.
     #[inline]
     fn from(val: T) -> Self {
@@ -230,16 +185,13 @@ impl<T> From<T> for Signal<T> {
     }
 }
 
-impl<T: fmt::Debug> fmt::Debug for SigValue<T> {
+impl<T> fmt::Debug for Signal<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match *self {
-            Constant(ref val) => write!(f, "Constant({:?})", val),
-            Dynamic(ref rf) => write!(f, "Dynamic(Fn@{:p})", rf),
-        }
+        write!(f, "Signal(Fn@{:p})", self.0)
     }
 }
 
-impl<T: fmt::Display + Clone> fmt::Display for Signal<T> {
+impl<T: fmt::Display> fmt::Display for Signal<T> {
     /// Samples the signal and formats the value.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Display::fmt(&self.sample(), f)
@@ -297,13 +249,6 @@ mod tests {
 
         assert_eq!(sig1.sample(), 2);
         assert_eq!(sig2.sample(), 2);
-    }
-
-    #[test]
-    fn signal_const() {
-        const THE_ANSWER: Signal<i32> = Signal::constant(42);
-
-        assert_eq!(THE_ANSWER.sample(), 42);
     }
 
     #[test]
