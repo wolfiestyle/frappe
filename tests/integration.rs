@@ -362,3 +362,17 @@ fn stream_send_order() {
     sink.send(());
     assert_eq!(result.sample(), [1, 2, 3]);
 }
+
+#[cfg(feature = "lazycell")]
+#[test]
+fn signal_cyclic() {
+    let sink = Sink::new();
+    let stream = sink.stream();
+    let sig = Signal::cyclic(|s| s.snapshot(&stream, |a, n| a + *n).hold(0));
+
+    assert_eq!(sig.sample(), 0);
+    sink.send(3);
+    assert_eq!(sig.sample(), 3);
+    sink.send(10);
+    assert_eq!(sig.sample(), 13);
+}

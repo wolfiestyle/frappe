@@ -31,6 +31,9 @@ use crate::types::{MaybeOwned, Storage};
 use std::fmt;
 use std::sync::{mpsc, Arc};
 
+#[cfg(feature = "lazycell")]
+use lazycell::AtomicLazyCell;
+
 /// Represents a value that changes over time.
 pub struct Signal<T>(Arc<dyn Fn() -> T + Send + Sync>);
 
@@ -151,6 +154,28 @@ impl<T> Signal<T> {
                 storage.get()
             }
         })
+    }
+
+    /// Creates a signal with a cyclic definition.
+    ///
+    /// This allows creating a self-referential Signal definition. The closure receives a forward
+    /// declaration of a signal that must be used to construct the final Signal. Then this
+    /// previous forward-declaration is replaced with the value returned by the closure.
+    ///
+    /// Sampling the forward-declared signal will cause a panic.
+    #[cfg(feature = "lazycell")]
+    pub fn cyclic<F>(definition: F) -> Self
+    where
+        F: FnOnce(&Signal<T>) -> Signal<T>,
+        T: 'static,
+    {
+        let storage = Arc::new(AtomicLazyCell::new());
+        let st = storage.clone();
+        let sig = Signal::from_fn(move || {
+            Signal::sample(st.borrow().expect("sampled forward-declared Signal"))
+        });
+        storage.fill(definition(&sig)).unwrap();
+        sig
     }
 }
 
