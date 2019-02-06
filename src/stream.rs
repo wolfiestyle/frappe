@@ -45,6 +45,9 @@ use std::sync::{mpsc, Arc};
 #[cfg(feature = "either")]
 use crate::types::Either;
 
+#[cfg(feature = "nightly")]
+use crate::futures::StreamFuture;
+
 /// A source of events that feeds the streams connected to it.
 #[derive(Debug)]
 pub struct Sink<T> {
@@ -422,6 +425,15 @@ impl<T: Clone + 'static> Stream<T> {
         Signal::from_storage(storage, self.clone())
     }
 
+    /// Creates a future that returns the next value sent to this stream.
+    #[cfg(feature = "nightly")]
+    pub fn next(&self) -> StreamFuture<T>
+    where
+        T: Send,
+    {
+        StreamFuture::new(self.clone())
+    }
+
     /// Creates a channel and sends the stream events through it.
     ///
     /// This doesn't create a strong reference to the parent stream, so the channel sender will be
@@ -742,5 +754,34 @@ mod tests {
         sink.send_parallel(&1);
         sink.send_parallel(&13);
         assert_eq!(result.sample(), 75);
+    }
+
+    #[cfg(feature = "nightly")]
+    #[test]
+    fn stream_future() {
+        use futures::executor::LocalPool;
+        use futures::task::SpawnExt;
+        use std::thread;
+        use std::time::Duration;
+
+        let sink = Sink::new();
+        let future = sink.stream().map(|a| *a * 2).next();
+        let mut pool = LocalPool::new();
+
+        pool.spawner()
+            .spawn(
+                async {
+                    let res = r#await!(future);
+                    assert_eq!(res, 42);
+                },
+            )
+            .unwrap();
+
+        thread::spawn(move || {
+            thread::sleep(Duration::from_millis(100));
+            sink.send(21);
+        });
+
+        pool.run();
     }
 }
