@@ -2,10 +2,9 @@ language: rust
 
 matrix:
   include:
-    rust:
-    - stable
-    - beta
-    - nightly
+    - rust: stable
+    - rust: beta
+    - rust: nightly
       env: FLAGS="--features=nightly"
 
 script:
