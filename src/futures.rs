@@ -83,6 +83,7 @@ mod tests {
         let future = StreamFuture::new(sink.stream());
 
         sink.send(42);
+        sink.send(13);
         assert_eq!(block_on(future), 42);
     }
 }
