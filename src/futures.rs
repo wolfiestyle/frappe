@@ -71,6 +71,8 @@ impl<T> Future for StreamFuture<T> {
     }
 }
 
+impl<T> Unpin for StreamFuture<T> {}
+
 #[cfg(test)]
 mod tests {
     use super::*;
