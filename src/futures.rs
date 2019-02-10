@@ -39,12 +39,14 @@ impl<T> StreamFuture<T> {
         T: Clone + Send + 'static,
     {
         let storage = StreamFutureStorage::new();
-        let st = storage.clone();
+        let weak = Arc::downgrade(&storage);
         stream.observe(move |val| {
-            let mut storage = st.lock();
-            storage.value = Some(val.into_owned());
-            if let Some(waker) = &storage.waker {
-                waker.wake();
+            if let Some(st) = weak.upgrade() {
+                let mut storage = st.lock();
+                storage.value = Some(val.into_owned());
+                if let Some(waker) = &storage.waker {
+                    waker.wake();
+                }
             }
             false
         });
