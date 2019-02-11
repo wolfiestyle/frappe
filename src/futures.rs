@@ -3,21 +3,30 @@
 use crate::stream::Stream;
 use crate::sync::Mutex;
 use std::future::Future;
+use std::mem;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{LocalWaker, Poll, Waker};
 
+/// The state a stream future.
+#[derive(Debug)]
+enum FutureValue<T> {
+    Pending,
+    Ready(T),
+    Finished,
+}
+
 /// The storage of a stream future.
 #[derive(Debug)]
 struct StreamFutureStorage<T> {
-    value: Option<T>,
+    value: FutureValue<T>,
     waker: Option<Waker>,
 }
 
 impl<T> StreamFutureStorage<T> {
     fn new() -> Arc<Mutex<Self>> {
         Arc::new(Mutex::new(StreamFutureStorage {
-            value: None,
+            value: FutureValue::Pending,
             waker: None,
         }))
     }
@@ -43,7 +52,7 @@ impl<T> StreamFuture<T> {
         stream.observe(move |val| {
             if let Some(st) = weak.upgrade() {
                 let mut storage = st.lock();
-                storage.value = Some(val.into_owned());
+                storage.value = FutureValue::Ready(val.into_owned());
                 if let Some(waker) = &storage.waker {
                     waker.wake();
                 }
@@ -64,11 +73,19 @@ impl<T> Future for StreamFuture<T> {
 
     fn poll(self: Pin<&mut Self>, lw: &LocalWaker) -> Poll<Self::Output> {
         let mut storage = self.storage.lock();
-        if let Some(value) = storage.value.take() {
-            Poll::Ready(value)
-        } else {
-            storage.waker = Some(lw.clone().into_waker());
-            Poll::Pending
+        match mem::replace(&mut storage.value, FutureValue::Pending) {
+            FutureValue::Ready(value) => {
+                storage.value = FutureValue::Finished;
+                Poll::Ready(value)
+            }
+            FutureValue::Pending => {
+                storage.waker = Some(lw.clone().into_waker());
+                Poll::Pending
+            }
+            FutureValue::Finished => {
+                storage.value = FutureValue::Finished;
+                panic!("future polled again after completion");
+            }
         }
     }
 }
@@ -89,5 +106,16 @@ mod tests {
         sink.send(42);
         sink.send(13);
         assert_eq!(block_on(future), 42);
+    }
+
+    #[test]
+    #[should_panic]
+    fn invalid_poll() {
+        let sink = Sink::new();
+        let mut future = StreamFuture::new(sink.stream());
+
+        sink.send(42);
+        let _a = block_on(&mut future);
+        let _b = block_on(&mut future);
     }
 }
