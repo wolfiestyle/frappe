@@ -23,12 +23,12 @@ struct StreamFutureStorage<T> {
     waker: Option<Waker>,
 }
 
-impl<T> StreamFutureStorage<T> {
-    fn new() -> Arc<Mutex<Self>> {
-        Arc::new(Mutex::new(StreamFutureStorage {
+impl<T> Default for StreamFutureStorage<T> {
+    fn default() -> Self {
+        StreamFutureStorage {
             value: FutureValue::Pending,
             waker: None,
-        }))
+        }
     }
 }
 
@@ -41,15 +41,21 @@ pub struct StreamFuture<T> {
     stream: Stream<T>,
 }
 
-impl<T> StreamFuture<T> {
+impl<T: Clone + Send + 'static> StreamFuture<T> {
     /// Creates a future that returns the next value sent to this stream.
-    pub(crate) fn new(stream: Stream<T>) -> Self
-    where
-        T: Clone + Send + 'static,
-    {
-        let storage = StreamFutureStorage::new();
-        let weak = Arc::downgrade(&storage);
-        stream.observe(move |val| {
+    pub(crate) fn new(stream: Stream<T>) -> Self {
+        let this = StreamFuture {
+            storage: Default::default(),
+            stream,
+        };
+        this.register_callback();
+        this
+    }
+
+    /// Registers the stream observer that will update this future.
+    fn register_callback(&self) {
+        let weak = Arc::downgrade(&self.storage);
+        self.stream.observe(move |val| {
             if let Some(st) = weak.upgrade() {
                 let mut storage = st.lock();
                 storage.value = FutureValue::Ready(val.into_owned());
@@ -59,12 +65,27 @@ impl<T> StreamFuture<T> {
             }
             false
         });
-        StreamFuture { storage, stream }
     }
 
     /// Obtains the source stream.
     pub fn get_source(&self) -> &Stream<T> {
         &self.stream
+    }
+
+    /// Reuses a finished future so it can wait for another value.
+    ///
+    /// Normally calling `poll` on a future after it returned `Poll::Ready` will panic.
+    /// This method will restart this future so it can be polled again for another value.
+    /// This allows awaiting for multiple values without having to create and allocate multiple
+    /// future objects.
+    ///
+    /// Calling this on a pending (or ready but unread) future will have no effect.
+    pub fn reload(&self) {
+        let mut storage = self.storage.lock();
+        if let FutureValue::Finished = storage.value {
+            *storage = Default::default();
+            self.register_callback();
+        }
     }
 }
 
@@ -117,5 +138,18 @@ mod tests {
         sink.send(42);
         let _a = block_on(&mut future);
         let _b = block_on(&mut future);
+    }
+
+    #[test]
+    fn reload() {
+        let sink = Sink::new();
+        let mut future = StreamFuture::new(sink.stream());
+
+        sink.send(42);
+        assert_eq!(block_on(&mut future), 42);
+
+        future.reload();
+        sink.send(13);
+        assert_eq!(block_on(&mut future), 13);
     }
 }
