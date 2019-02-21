@@ -829,7 +829,7 @@ mod tests {
         assert_eq!(rx.try_recv(), Err(Empty), "when other does not have any value");
 
         sink2.send("foo");
-        assert_eq!(rx.try_recv(), Ok((1, "foo")), "when  both self and other have value");
+        assert_eq!(rx.try_recv(), Ok((1, "foo")), "when both self and other have value");
 
         let sink1: Sink<i32> = Sink::new();
         let sink2: Sink<&str> = Sink::new();
