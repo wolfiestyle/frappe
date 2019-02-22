@@ -425,6 +425,36 @@ impl<T: Clone + 'static> Stream<T> {
         Signal::from_storage(storage, self.clone())
     }
 
+    /// Creates a Stream like (`self`'s last value, `other`'s last value)
+    ///
+    /// `zip` will not send any value until receive a value from both `self` and `other`.
+    pub fn zip<U>(&self, other: &Stream<U>) -> Stream<(T, U)>
+    where
+        T: Send + Sync,
+        U: Clone + Send + Sync + 'static
+    {
+        let old1 = self.map(|x| Some(x.into_owned())).hold(None);
+        let old2 = other.map(|x| Some(x.into_owned())).hold(None);
+
+        let (new_cbs, weak1) = arc_and_weak(Callbacks::new());
+        let weak2 = weak1.clone();
+
+        self.cbs.push(move |arg| with_weak!(weak1, |cb| {
+            match old2.sample() {
+                Some(old2) => cb.call((arg.into_owned(), old2)),
+                None => ()
+            }
+        }));
+        other.cbs.push(move |arg| with_weak!(weak2, |cb| {
+            match old1.sample() {
+                Some(old1) => cb.call((old1, arg.into_owned())),
+                None => ()
+            }
+        }));
+
+        Stream::new(new_cbs, Source::stream2(self, other))
+    }
+
     /// Creates a future that returns the next value sent to this stream.
     #[cfg(feature = "nightly")]
     pub fn next(&self) -> StreamFuture<T>
@@ -783,5 +813,31 @@ mod tests {
         });
 
         pool.run();
+    }
+
+    #[test]
+    fn stream_zip() {
+        use std::sync::mpsc::TryRecvError::Empty;
+
+        let sink1: Sink<i32> = Sink::new();
+        let sink2: Sink<&str> = Sink::new();
+        let zipped = sink1.stream().zip(&sink2.stream());
+        let (tx, rx) = mpsc::sync_channel(10);
+        zipped.observe(move |n| tx.send(*n));
+
+        sink1.send(1);
+        assert_eq!(rx.try_recv(), Err(Empty), "when other does not have any value");
+
+        sink2.send("foo");
+        assert_eq!(rx.try_recv(), Ok((1, "foo")), "when both self and other have value");
+
+        let sink1: Sink<i32> = Sink::new();
+        let sink2: Sink<&str> = Sink::new();
+        let zipped = sink1.stream().zip(&sink2.stream());
+        let (tx, rx) = mpsc::sync_channel(10);
+        zipped.observe(move |n| tx.send(*n));
+
+        sink2.send("foo");
+        assert_eq!(rx.try_recv(), Err(Empty), "when self does not have any value");
     }
 }
