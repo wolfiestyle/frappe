@@ -30,6 +30,11 @@ impl<T> Storage<T> {
         *self.val.write() = Some(val);
     }
 
+    /// Takes the value and leaves the storage empty.
+    pub fn take(&self) -> Option<T> {
+        self.val.write().take()
+    }
+
     /// Maps the stored value in place.
     pub fn replace<F>(&self, f: F)
     where

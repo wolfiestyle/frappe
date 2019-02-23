@@ -425,32 +425,38 @@ impl<T: Clone + 'static> Stream<T> {
         Signal::from_storage(storage, self.clone())
     }
 
-    /// Creates a Stream like (`self`'s last value, `other`'s last value)
+    /// Collects a pair of values using the last value from two streams.
     ///
-    /// `zip` will not send any value until receive a value from both `self` and `other`.
+    /// This creates a Stream of tuples containing `self`'s last value and `other`'s last value.
+    /// The output stream will not send any value until it receives a value from both input streams.
     pub fn zip<U>(&self, other: &Stream<U>) -> Stream<(T, U)>
     where
         T: Send + Sync,
-        U: Clone + Send + Sync + 'static
+        U: Clone + Send + Sync + 'static,
     {
-        let old1 = self.map(|x| Some(x.into_owned())).hold(None);
-        let old2 = other.map(|x| Some(x.into_owned())).hold(None);
-
         let (new_cbs, weak1) = arc_and_weak(Callbacks::new());
         let weak2 = weak1.clone();
 
-        self.cbs.push(move |arg| with_weak!(weak1, |cb| {
-            match old2.sample() {
-                Some(old2) => cb.call((arg.into_owned(), old2)),
-                None => ()
-            }
-        }));
-        other.cbs.push(move |arg| with_weak!(weak2, |cb| {
-            match old1.sample() {
-                Some(old1) => cb.call((old1, arg.into_owned())),
-                None => ()
-            }
-        }));
+        let st_left = Arc::new(Storage::default());
+        let st_right = Arc::new(Storage::default());
+        let st_left1 = st_left.clone();
+        let st_right1 = st_right.clone();
+
+        self.cbs.push(move |arg| {
+            with_weak!(weak1, |cb| if let Some(val) = st_right1.take() {
+                cb.call((arg.into_owned(), val));
+            } else {
+                st_left.set(arg.into_owned());
+            })
+        });
+
+        other.cbs.push(move |arg| {
+            with_weak!(weak2, |cb| if let Some(val) = st_left1.take() {
+                cb.call((val, arg.into_owned()));
+            } else {
+                st_right.set(arg.into_owned());
+            })
+        });
 
         Stream::new(new_cbs, Source::stream2(self, other))
     }
@@ -826,18 +832,24 @@ mod tests {
         zipped.observe(move |n| tx.send(*n));
 
         sink1.send(1);
-        assert_eq!(rx.try_recv(), Err(Empty), "when other does not have any value");
+        assert_eq!(
+            rx.try_recv(),
+            Err(Empty),
+            "when other does not have any value"
+        );
 
         sink2.send("foo");
-        assert_eq!(rx.try_recv(), Ok((1, "foo")), "when both self and other have value");
-
-        let sink1: Sink<i32> = Sink::new();
-        let sink2: Sink<&str> = Sink::new();
-        let zipped = sink1.stream().zip(&sink2.stream());
-        let (tx, rx) = mpsc::sync_channel(10);
-        zipped.observe(move |n| tx.send(*n));
+        assert_eq!(
+            rx.try_recv(),
+            Ok((1, "foo")),
+            "when both self and other have value"
+        );
 
         sink2.send("foo");
-        assert_eq!(rx.try_recv(), Err(Empty), "when self does not have any value");
+        assert_eq!(
+            rx.try_recv(),
+            Err(Empty),
+            "when self does not have any value"
+        );
     }
 }
