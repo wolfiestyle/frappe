@@ -39,6 +39,7 @@ use crate::signal::Signal;
 use crate::sync::Mutex;
 use crate::types::{Callbacks, MaybeOwned, ObserveResult, Storage, SumType2};
 use std::any::Any;
+use std::collections::VecDeque;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{mpsc, Arc};
 
@@ -425,11 +426,51 @@ impl<T: Clone + 'static> Stream<T> {
         Signal::from_storage(storage, self.clone())
     }
 
-    /// Collects a pair of values using the last value from two streams.
+    /// Collects pairs of values from two streams.
+    ///
+    /// This creates a Stream of tuples containing each of `self`'s values and `other`'s values.
+    /// The output stream will not send any value until it receives a value from both input streams.
+    /// This version of zip will pair each value from both streams, so if one stream sends values
+    /// slower than the other, older values will get accumulated and sent in order.
+    pub fn zip<U>(&self, other: &Stream<U>) -> Stream<(T, U)>
+    where
+        T: Send,
+        U: Clone + Send + 'static,
+    {
+        let (new_cbs, weak1) = arc_and_weak(Callbacks::new());
+        let weak2 = weak1.clone();
+
+        let left = Arc::new(Mutex::new(VecDeque::new()));
+        let right = Arc::new(Mutex::new(VecDeque::new()));
+        let left1 = left.clone();
+        let right1 = right.clone();
+
+        self.cbs.push(move |arg| {
+            with_weak!(weak1, |cb| if let Some(val) = right1.lock().pop_front() {
+                cb.call((arg.into_owned(), val));
+            } else {
+                left.lock().push_back(arg.into_owned());
+            })
+        });
+
+        other.cbs.push(move |arg| {
+            with_weak!(weak2, |cb| if let Some(val) = left1.lock().pop_front() {
+                cb.call((val, arg.into_owned()));
+            } else {
+                right.lock().push_back(arg.into_owned());
+            })
+        });
+
+        Stream::new(new_cbs, Source::stream2(self, other))
+    }
+
+    /// Collects pairs of values from two streams using the last value seen.
     ///
     /// This creates a Stream of tuples containing `self`'s last value and `other`'s last value.
     /// The output stream will not send any value until it receives a value from both input streams.
-    pub fn zip<U>(&self, other: &Stream<U>) -> Stream<(T, U)>
+    /// This version of zip doesn't accumulate values, so if one stream sends values faster than
+    /// the other, it will only pick the last value seen from the other stream.
+    pub fn zip_last<U>(&self, other: &Stream<U>) -> Stream<(T, U)>
     where
         T: Send + Sync,
         U: Clone + Send + Sync + 'static,
@@ -832,24 +873,40 @@ mod tests {
         zipped.observe(move |n| tx.send(*n));
 
         sink1.send(1);
-        assert_eq!(
-            rx.try_recv(),
-            Err(Empty),
-            "when other does not have any value"
-        );
+        assert_eq!(rx.try_recv(), Err(Empty));
 
         sink2.send("foo");
-        assert_eq!(
-            rx.try_recv(),
-            Ok((1, "foo")),
-            "when both self and other have value"
-        );
+        assert_eq!(rx.try_recv(), Ok((1, "foo")));
+
+        sink2.send("bar");
+        assert_eq!(rx.try_recv(), Err(Empty));
+
+        sink2.send("asd");
+        sink1.send(2);
+        assert_eq!(rx.try_recv(), Ok((2, "bar")));
+    }
+
+    #[test]
+    fn stream_zip_last() {
+        use std::sync::mpsc::TryRecvError::Empty;
+
+        let sink1: Sink<i32> = Sink::new();
+        let sink2: Sink<&str> = Sink::new();
+        let zipped = sink1.stream().zip_last(&sink2.stream());
+        let (tx, rx) = mpsc::sync_channel(10);
+        zipped.observe(move |n| tx.send(*n));
+
+        sink1.send(1);
+        assert_eq!(rx.try_recv(), Err(Empty));
 
         sink2.send("foo");
-        assert_eq!(
-            rx.try_recv(),
-            Err(Empty),
-            "when self does not have any value"
-        );
+        assert_eq!(rx.try_recv(), Ok((1, "foo")));
+
+        sink2.send("bar");
+        assert_eq!(rx.try_recv(), Err(Empty));
+
+        sink2.send("asd");
+        sink1.send(2);
+        assert_eq!(rx.try_recv(), Ok((2, "asd")));
     }
 }
