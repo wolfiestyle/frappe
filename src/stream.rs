@@ -472,30 +472,30 @@ impl<T: Clone + 'static> Stream<T> {
     /// the other, it will only pick the last value seen from the other stream.
     pub fn zip_last<U>(&self, other: &Stream<U>) -> Stream<(T, U)>
     where
-        T: Send + Sync,
-        U: Clone + Send + Sync + 'static,
+        T: Send,
+        U: Clone + Send + 'static,
     {
         let (new_cbs, weak1) = arc_and_weak(Callbacks::new());
         let weak2 = weak1.clone();
 
-        let st_left = Arc::new(Storage::default());
-        let st_right = Arc::new(Storage::default());
-        let st_left1 = st_left.clone();
-        let st_right1 = st_right.clone();
+        let left = Arc::new(Mutex::new(None));
+        let right = Arc::new(Mutex::new(None));
+        let left1 = left.clone();
+        let right1 = right.clone();
 
         self.cbs.push(move |arg| {
-            with_weak!(weak1, |cb| if let Some(val) = st_right1.take() {
+            with_weak!(weak1, |cb| if let Some(val) = right1.lock().take() {
                 cb.call((arg.into_owned(), val));
             } else {
-                st_left.set(arg.into_owned());
+                *left.lock() = Some(arg.into_owned());
             })
         });
 
         other.cbs.push(move |arg| {
-            with_weak!(weak2, |cb| if let Some(val) = st_left1.take() {
+            with_weak!(weak2, |cb| if let Some(val) = left1.lock().take() {
                 cb.call((val, arg.into_owned()));
             } else {
-                st_right.set(arg.into_owned());
+                *right.lock() = Some(arg.into_owned());
             })
         });
 
