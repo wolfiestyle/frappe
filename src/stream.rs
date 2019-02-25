@@ -387,26 +387,27 @@ impl<T: 'static> Stream<T> {
         });
         Stream::new(new_cbs, Source::stream(self))
     }
-}
 
-impl<T: Clone + 'static> Stream<T> {
     /// Creates a collection from the values sent to this stream.
     #[inline]
     pub fn collect<C>(&self) -> Signal<C>
     where
         C: Default + Extend<T> + Clone + Send + Sync + 'static,
+        T: Clone,
     {
         self.fold(C::default(), |mut a, v| {
             a.extend(Some(v.into_owned()));
             a
         })
     }
+}
 
+impl<T: Clone + Send + 'static> Stream<T> {
     /// Creates a Signal that holds the last value sent to this stream.
     #[inline]
     pub fn hold(&self, initial: T) -> Signal<T>
     where
-        T: Send + Sync,
+        T: Sync,
     {
         self.hold_if(initial, |_| true)
     }
@@ -415,7 +416,7 @@ impl<T: Clone + 'static> Stream<T> {
     pub fn hold_if<F>(&self, initial: T, pred: F) -> Signal<T>
     where
         F: Fn(&T) -> bool + Send + Sync + 'static,
-        T: Send + Sync,
+        T: Sync,
     {
         let (storage, weak) = arc_and_weak(Storage::new(initial));
         self.cbs.push(move |arg| {
@@ -435,7 +436,6 @@ impl<T: Clone + 'static> Stream<T> {
     #[inline]
     pub fn zip<U>(&self, other: &Stream<U>) -> Stream<(T, U)>
     where
-        T: Send,
         U: Clone + Send + 'static,
     {
         self.zip_with(other, |a, b| (a, b))
@@ -445,7 +445,6 @@ impl<T: Clone + 'static> Stream<T> {
     pub fn zip_with<U, F, R>(&self, other: &Stream<U>, f: F) -> Stream<R>
     where
         F: Fn(T, U) -> R + Clone + Send + Sync + 'static,
-        T: Send,
         U: Clone + Send + 'static,
         R: 'static,
     {
@@ -486,7 +485,6 @@ impl<T: Clone + 'static> Stream<T> {
     #[inline]
     pub fn zip_last<U>(&self, other: &Stream<U>) -> Stream<(T, U)>
     where
-        T: Send,
         U: Clone + Send + 'static,
     {
         self.zip_last_with(other, |a, b| (a, b))
@@ -496,7 +494,6 @@ impl<T: Clone + 'static> Stream<T> {
     pub fn zip_last_with<U, F, R>(&self, other: &Stream<U>, f: F) -> Stream<R>
     where
         F: Fn(T, U) -> R + Clone + Send + Sync + 'static,
-        T: Send,
         U: Clone + Send + 'static,
         R: 'static,
     {
@@ -530,10 +527,7 @@ impl<T: Clone + 'static> Stream<T> {
 
     /// Creates a future that returns the next value sent to this stream.
     #[cfg(feature = "nightly")]
-    pub fn next(&self) -> StreamFuture<T>
-    where
-        T: Send,
-    {
+    pub fn next(&self) -> StreamFuture<T> {
         StreamFuture::new(self.clone())
     }
 
@@ -545,10 +539,7 @@ impl<T: Clone + 'static> Stream<T> {
         since = "0.4.1",
         note = "use `Stream::observe` to send values into a channel"
     )]
-    pub fn as_channel(&self) -> mpsc::Receiver<T>
-    where
-        T: Send,
-    {
+    pub fn as_channel(&self) -> mpsc::Receiver<T> {
         let (tx, rx) = mpsc::channel();
         //FIXME: it should use one Sender instance per thread but idk how to do it
         let tx = Mutex::new(tx);
