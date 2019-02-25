@@ -546,6 +546,14 @@ impl<T: Clone + Send + 'static> Stream<T> {
         self.observe(move |arg| tx.lock().send(arg.into_owned()));
         rx
     }
+
+    /// Creates a sync channel and sends the stream events through it.
+    #[cfg(test)]
+    pub fn as_sync_channel(&self, bound: usize) -> mpsc::Receiver<T> {
+        let (tx, rx) = mpsc::sync_channel(bound);
+        self.observe(move |arg| tx.send(arg.into_owned()));
+        rx
+    }
 }
 
 impl<T: Clone + 'static> Stream<Option<T>> {
@@ -713,8 +721,7 @@ mod tests {
     fn stream_basic() {
         let sink = Sink::new();
         let stream = sink.stream();
-        let (tx, rx) = mpsc::sync_channel(20);
-        stream.observe(move |a| tx.send(*a));
+        let rx = stream.as_sync_channel(20);
 
         sink.send(42);
         sink.send(33);
@@ -733,8 +740,7 @@ mod tests {
 
         let sink: Sink<Test> = Sink::new();
         let stream = sink.stream();
-        let (tx, rx) = mpsc::sync_channel(10);
-        stream.observe(move |a| tx.send(a.into_owned()));
+        let rx = stream.as_sync_channel(10);
 
         {
             let a = Test(42);
@@ -755,8 +761,7 @@ mod tests {
         let sink2 = Sink::new();
 
         let switched = stream_sink.stream().switch();
-        let (tx, events) = mpsc::sync_channel(10);
-        switched.observe(move |a| tx.send(*a));
+        let events = switched.as_sync_channel(10);
 
         sink1.send(1);
         sink2.send(2);
@@ -778,8 +783,7 @@ mod tests {
         let stream1 = sink.stream();
         let stream2: Stream<i32> = Default::default();
         let merged = stream1.merge(&stream2);
-        let (tx, rx) = mpsc::sync_channel(10);
-        merged.observe(move |a| tx.send(*a));
+        let rx = merged.as_sync_channel(10);
 
         sink.send(42);
         sink.send(13);
@@ -792,8 +796,7 @@ mod tests {
     fn stream_scan() {
         let sink = Sink::new();
         let stream = sink.stream().scan(0, |a, n| a + *n);
-        let (tx, rx) = mpsc::sync_channel(10);
-        stream.observe(move |n| tx.send(*n));
+        let rx = stream.as_sync_channel(10);
 
         sink.send(1);
         assert_eq!(rx.try_recv(), Ok(1));
@@ -886,8 +889,7 @@ mod tests {
         let sink1: Sink<i32> = Sink::new();
         let sink2: Sink<&str> = Sink::new();
         let zipped = sink1.stream().zip(&sink2.stream());
-        let (tx, rx) = mpsc::sync_channel(10);
-        zipped.observe(move |n| tx.send(*n));
+        let rx = zipped.as_sync_channel(10);
 
         sink1.send(1);
         assert_eq!(rx.try_recv(), Err(Empty));
@@ -910,8 +912,7 @@ mod tests {
         let sink1: Sink<i32> = Sink::new();
         let sink2: Sink<&str> = Sink::new();
         let zipped = sink1.stream().zip_last(&sink2.stream());
-        let (tx, rx) = mpsc::sync_channel(10);
-        zipped.observe(move |n| tx.send(*n));
+        let rx = zipped.as_sync_channel(10);
 
         sink1.send(1);
         assert_eq!(rx.try_recv(), Err(Empty));
