@@ -432,10 +432,22 @@ impl<T: Clone + 'static> Stream<T> {
     /// The output stream will not send any value until it receives a value from both input streams.
     /// This version of zip will pair each value from both streams, so if one stream sends values
     /// slower than the other, older values will get accumulated and sent in order.
+    #[inline]
     pub fn zip<U>(&self, other: &Stream<U>) -> Stream<(T, U)>
     where
         T: Send,
         U: Clone + Send + 'static,
+    {
+        self.zip_with(other, |a, b| (a, b))
+    }
+
+    /// Zips two streams using a custom function.
+    pub fn zip_with<U, F, R>(&self, other: &Stream<U>, f: F) -> Stream<R>
+    where
+        F: Fn(T, U) -> R + Clone + Send + Sync + 'static,
+        T: Send,
+        U: Clone + Send + 'static,
+        R: 'static,
     {
         let (new_cbs, weak1) = arc_and_weak(Callbacks::new());
         let weak2 = weak1.clone();
@@ -444,10 +456,11 @@ impl<T: Clone + 'static> Stream<T> {
         let right = Arc::new(Mutex::new(VecDeque::new()));
         let left1 = left.clone();
         let right1 = right.clone();
+        let f_ = f.clone();
 
         self.cbs.push(move |arg| {
             with_weak!(weak1, |cb| if let Some(val) = right1.lock().pop_front() {
-                cb.call((arg.into_owned(), val));
+                cb.call(f(arg.into_owned(), val));
             } else {
                 left.lock().push_back(arg.into_owned());
             })
@@ -455,7 +468,7 @@ impl<T: Clone + 'static> Stream<T> {
 
         other.cbs.push(move |arg| {
             with_weak!(weak2, |cb| if let Some(val) = left1.lock().pop_front() {
-                cb.call((val, arg.into_owned()));
+                cb.call(f_(val, arg.into_owned()));
             } else {
                 right.lock().push_back(arg.into_owned());
             })
@@ -470,10 +483,22 @@ impl<T: Clone + 'static> Stream<T> {
     /// The output stream will not send any value until it receives a value from both input streams.
     /// This version of zip doesn't accumulate values, so if one stream sends values faster than
     /// the other, it will only pick the last value seen from the other stream.
+    #[inline]
     pub fn zip_last<U>(&self, other: &Stream<U>) -> Stream<(T, U)>
     where
         T: Send,
         U: Clone + Send + 'static,
+    {
+        self.zip_last_with(other, |a, b| (a, b))
+    }
+
+    /// Performs zip_last using a custom function.
+    pub fn zip_last_with<U, F, R>(&self, other: &Stream<U>, f: F) -> Stream<R>
+    where
+        F: Fn(T, U) -> R + Clone + Send + Sync + 'static,
+        T: Send,
+        U: Clone + Send + 'static,
+        R: 'static,
     {
         let (new_cbs, weak1) = arc_and_weak(Callbacks::new());
         let weak2 = weak1.clone();
@@ -482,10 +507,11 @@ impl<T: Clone + 'static> Stream<T> {
         let right = Arc::new(Mutex::new(None));
         let left1 = left.clone();
         let right1 = right.clone();
+        let f_ = f.clone();
 
         self.cbs.push(move |arg| {
             with_weak!(weak1, |cb| if let Some(val) = right1.lock().take() {
-                cb.call((arg.into_owned(), val));
+                cb.call(f(arg.into_owned(), val));
             } else {
                 *left.lock() = Some(arg.into_owned());
             })
@@ -493,7 +519,7 @@ impl<T: Clone + 'static> Stream<T> {
 
         other.cbs.push(move |arg| {
             with_weak!(weak2, |cb| if let Some(val) = left1.lock().take() {
-                cb.call((val, arg.into_owned()));
+                cb.call(f_(val, arg.into_owned()));
             } else {
                 *right.lock() = Some(arg.into_owned());
             })
