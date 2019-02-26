@@ -531,22 +531,6 @@ impl<T: Clone + Send + 'static> Stream<T> {
         StreamFuture::new(self.clone())
     }
 
-    /// Creates a channel and sends the stream events through it.
-    ///
-    /// This doesn't create a strong reference to the parent stream, so the channel sender will be
-    /// dropped when the stream is deleted.
-    #[deprecated(
-        since = "0.4.1",
-        note = "use `Stream::observe` to send values into a channel"
-    )]
-    pub fn as_channel(&self) -> mpsc::Receiver<T> {
-        let (tx, rx) = mpsc::channel();
-        //FIXME: it should use one Sender instance per thread but idk how to do it
-        let tx = Mutex::new(tx);
-        self.observe(move |arg| tx.lock().send(arg.into_owned()));
-        rx
-    }
-
     /// Creates a sync channel and sends the stream events through it.
     #[cfg(test)]
     pub fn as_sync_channel(&self, bound: usize) -> mpsc::Receiver<T> {
