@@ -41,7 +41,7 @@ use crate::types::{Callbacks, MaybeOwned, ObserveResult, Storage, SumType2};
 use std::any::Any;
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{mpsc, Arc};
+use std::sync::Arc;
 
 #[cfg(feature = "either")]
 use crate::types::Either;
@@ -530,14 +530,6 @@ impl<T: Clone + Send + 'static> Stream<T> {
     pub fn next(&self) -> StreamFuture<T> {
         StreamFuture::new(self.clone())
     }
-
-    /// Creates a sync channel and sends the stream events through it.
-    #[cfg(test)]
-    pub fn as_sync_channel(&self, bound: usize) -> mpsc::Receiver<T> {
-        let (tx, rx) = mpsc::sync_channel(bound);
-        self.observe(move |arg| tx.send(arg.into_owned()));
-        rx
-    }
 }
 
 impl<T: Clone + 'static> Stream<Option<T>> {
@@ -700,6 +692,15 @@ impl<T> Clone for Sender<T> {
 mod tests {
     use super::*;
     use std::sync::mpsc;
+
+    impl<T: Clone + Send + 'static> Stream<T> {
+        /// Creates a sync channel and sends the stream events through it.
+        fn as_sync_channel(&self, bound: usize) -> mpsc::Receiver<T> {
+            let (tx, rx) = mpsc::sync_channel(bound);
+            self.observe(move |arg| tx.send(arg.into_owned()));
+            rx
+        }
+    }
 
     #[test]
     fn stream_basic() {
