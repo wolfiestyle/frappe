@@ -302,4 +302,16 @@ mod tests {
         assert_eq!(format!("{}", sig1), "42");
         assert_eq!(format!("{}", sig2), "13");
     }
+
+    #[test]
+    fn signal_channel() {
+        let (tx, rx) = mpsc::channel();
+        let sig = Signal::fold_channel(0, rx, |a, n| a + n);
+
+        for i in 0..=10 {
+            tx.send(i).unwrap();
+        }
+
+        assert_eq!(sig.sample(), 55);
+    }
 }

@@ -87,41 +87,6 @@ fn merge_with_either() {
 }
 
 #[test]
-fn signal_channel() {
-    use std::sync::mpsc::{channel, sync_channel};
-
-    let sink = Sink::new();
-    let (tx, input) = sync_channel(100);
-    sink.stream().observe(move |a| tx.send(*a));
-    let (output, result) = channel();
-    let s_result = Signal::from_channel(0, result);
-
-    let thread = std::thread::spawn(move || {
-        let sink2 = Sink::new();
-        let stream = sink2.stream();
-        let s_sum = stream.fold(0, |a, n| a + *n);
-        let doubles = stream.map(|n| *n * 2);
-        let (tx, rx_doubles) = sync_channel(100);
-        doubles.observe(move |a| tx.send(*a));
-
-        sink2.feed(input);
-
-        output.send(s_sum.sample()).unwrap();
-        rx_doubles
-    });
-
-    assert_eq!(s_result.sample(), 0);
-
-    sink.feed(1..100);
-    drop(sink);
-
-    let doubles = thread.join().unwrap();
-    let s_doubles = Signal::fold_channel(0, doubles, |a, n| a + n);
-    assert_eq!(s_result.sample(), 4950);
-    assert_eq!(s_doubles.sample(), 9900);
-}
-
-#[test]
 fn signal_switch() {
     let signal_sink = Sink::new();
     let switched = signal_sink.stream().hold(Default::default()).switch();
