@@ -427,6 +427,40 @@ impl<T: Clone + Send + 'static> Stream<T> {
         Signal::from_storage(storage, self.clone())
     }
 
+    /// Creates a Stream that sends the last value of `self` and `other` when either of those gets updated.
+    ///
+    /// The output stream will not send any value until it receives a value from both input streams.
+    pub fn combine<U>(&self, other: &Stream<U>) -> Stream<(T, U)>
+    where
+        U: Clone + Send + 'static
+    {
+        let (new_cbs, weak1) = arc_and_weak(Callbacks::new());
+        let weak2 = weak1.clone();
+
+        let left = Arc::new(Mutex::new(None));
+        let right = Arc::new(Mutex::new(None));
+        let left1 = left.clone();
+        let right1 = right.clone();
+
+        self.cbs.push(move |arg| {
+            let arg = arg.into_owned();
+            *left.lock() = Some(arg.clone());
+            with_weak!(weak1, |cb| if let Some(val) = right.lock().take() {
+                cb.call((arg, val));
+            })
+        });
+
+        other.cbs.push(move |arg| {
+            let arg = arg.into_owned();
+            *right1.lock() = Some(arg.clone());
+            with_weak!(weak2, |cb| if let Some(val) = left1.lock().take() {
+                cb.call((val, arg));
+            })
+        });
+
+        Stream::new(new_cbs, Source::stream2(self, other))
+    }
+
     /// Collects pairs of values from two streams.
     ///
     /// This creates a Stream of tuples containing each of `self`'s values and `other`'s values.
@@ -911,5 +945,25 @@ mod tests {
         sink2.send("asd");
         sink1.send(2);
         assert_eq!(rx.try_recv(), Ok((2, "asd")));
+    }
+
+    #[test]
+    fn stream_combine() {
+        use std::sync::mpsc::TryRecvError::Empty;
+
+        let sink1: Sink<i32> = Sink::new();
+        let sink2: Sink<&str> = Sink::new();
+        let zipped = sink1.stream().combine(&sink2.stream());
+        let (tx, rx) = mpsc::sync_channel(10);
+        zipped.observe(move |n| tx.send(*n));
+
+        sink1.send(1);
+        assert_eq!(rx.try_recv(), Err(Empty));
+
+        sink2.send("foo");
+        assert_eq!(rx.try_recv(), Ok((1, "foo")));
+
+        sink1.send(2);
+        assert_eq!(rx.try_recv(), Ok((2, "foo")));
     }
 }
