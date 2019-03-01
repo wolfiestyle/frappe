@@ -388,6 +388,29 @@ impl<T: 'static> Stream<T> {
         Stream::new(new_cbs, Source::stream(self))
     }
 
+    /// Folds the stream and returns `0..N` output values.
+    ///
+    /// The closure must process the input state `A`, send a value to the output stream using the
+    /// provided Sender and then return a new state. Multiple values (or none) can be sent to the
+    /// output stream this way.
+    pub fn scan_n<A, F, R>(&self, initial: A, f: F) -> Stream<R>
+    where
+        F: Fn(A, MaybeOwned<'_, T>, Sender<R>) -> A + Send + Sync + 'static,
+        A: Send + Sync + 'static,
+        R: 'static,
+    {
+        let (new_cbs, weak) = arc_and_weak(Callbacks::new());
+        let storage = Storage::new(initial);
+        self.cbs.push(move |arg| {
+            with_weak!(weak, |cb| storage.replace(|old| f(
+                old,
+                arg,
+                Sender::new(cb)
+            )))
+        });
+        Stream::new(new_cbs, Source::stream(self))
+    }
+
     /// Creates a collection from the values sent to this stream.
     #[inline]
     pub fn collect<C>(&self) -> Signal<C>
@@ -791,6 +814,26 @@ mod tests {
         sink.send(10);
         assert_eq!(rx.try_recv(), Ok(3));
         assert_eq!(rx.try_recv(), Ok(13));
+    }
+
+    #[test]
+    fn stream_scan_n() {
+        let sink = Sink::new();
+        let stream = sink.stream().scan_n(std::i32::MIN, |a, n, sender| {
+            let n = *n;
+            if n > a {
+                sender.send(n);
+                n
+            } else {
+                a
+            }
+        });
+        let rx = stream.as_sync_channel(10);
+
+        sink.feed(&[1, 2, -1, 10, 5, 7, 42]);
+
+        let result: Vec<_> = rx.try_iter().collect();
+        assert_eq!(result, [1, 2, 10, 42]);
     }
 
     #[test]
