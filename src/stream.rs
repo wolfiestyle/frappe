@@ -427,12 +427,11 @@ impl<T: Clone + Send + 'static> Stream<T> {
         Signal::from_storage(storage, self.clone())
     }
 
-    /// Collects pairs of values from two streams.
+    /// Collects all pairs of values from two streams.
     ///
-    /// This creates a Stream of tuples containing each of `self`'s values and `other`'s values.
-    /// The output stream will not send any value until it receives a value from both input streams.
-    /// This version of zip will pair each value from both streams, so if one stream sends values
-    /// slower than the other, older values will get accumulated and sent in order.
+    /// This creates a Stream of tuples containing each of `self`'s values and `other`'s values in
+    /// chronological order. An unique value from both streams is required to send a result to the
+    /// output stream.
     #[inline]
     pub fn zip<U>(&self, other: &Stream<U>) -> Stream<(T, U)>
     where
@@ -476,11 +475,11 @@ impl<T: Clone + Send + 'static> Stream<T> {
         Stream::new(new_cbs, Source::stream2(self, other))
     }
 
-    /// Combines pairs of values from two streams using their last value seen.
+    /// Collects pairs of values from two streams using their last value seen.
     ///
     /// This creates a Stream that sends the last value of `self` and `other` when either of those
-    /// receives an event.
-    /// The output stream will not send any value until it receives a value from both input streams.
+    /// receives a value. The stream values before calling this function aren't known, so to send
+    /// the first output value it's required that both input streams send their initial value.
     #[inline]
     pub fn combine<U>(&self, other: &Stream<U>) -> Stream<(T, U)>
     where
