@@ -476,55 +476,6 @@ impl<T: Clone + Send + 'static> Stream<T> {
         Stream::new(new_cbs, Source::stream2(self, other))
     }
 
-    /// Collects pairs of values from two streams using the last value seen.
-    ///
-    /// This creates a Stream of tuples containing `self`'s last value and `other`'s last value.
-    /// The output stream will not send any value until it receives a value from both input streams.
-    /// This version of zip doesn't accumulate values, so if one stream sends values faster than
-    /// the other, it will only pick the last value seen from the other stream.
-    #[inline]
-    pub fn zip_last<U>(&self, other: &Stream<U>) -> Stream<(T, U)>
-    where
-        U: Clone + Send + 'static,
-    {
-        self.zip_last_with(other, |a, b| (a, b))
-    }
-
-    /// Performs zip_last using a custom function.
-    pub fn zip_last_with<U, F, R>(&self, other: &Stream<U>, f: F) -> Stream<R>
-    where
-        F: Fn(T, U) -> R + Clone + Send + Sync + 'static,
-        U: Clone + Send + 'static,
-        R: 'static,
-    {
-        let (new_cbs, weak1) = arc_and_weak(Callbacks::new());
-        let weak2 = weak1.clone();
-
-        let left = Arc::new(Mutex::new(None));
-        let right = Arc::new(Mutex::new(None));
-        let left1 = left.clone();
-        let right1 = right.clone();
-        let f_ = f.clone();
-
-        self.cbs.push(move |arg| {
-            with_weak!(weak1, |cb| if let Some(val) = right1.lock().take() {
-                cb.call(f(arg.into_owned(), val));
-            } else {
-                *left.lock() = Some(arg.into_owned());
-            })
-        });
-
-        other.cbs.push(move |arg| {
-            with_weak!(weak2, |cb| if let Some(val) = left1.lock().take() {
-                cb.call(f_(val, arg.into_owned()));
-            } else {
-                *right.lock() = Some(arg.into_owned());
-            })
-        });
-
-        Stream::new(new_cbs, Source::stream2(self, other))
-    }
-
     /// Combines pairs of values from two streams using their last value seen.
     ///
     /// This creates a Stream that sends the last value of `self` and `other` when either of those
@@ -940,29 +891,6 @@ mod tests {
         sink2.send("asd");
         sink1.send(2);
         assert_eq!(rx.try_recv(), Ok((2, "bar")));
-    }
-
-    #[test]
-    fn stream_zip_last() {
-        use std::sync::mpsc::TryRecvError::Empty;
-
-        let sink1: Sink<i32> = Sink::new();
-        let sink2: Sink<&str> = Sink::new();
-        let zipped = sink1.stream().zip_last(&sink2.stream());
-        let rx = zipped.as_sync_channel(10);
-
-        sink1.send(1);
-        assert_eq!(rx.try_recv(), Err(Empty));
-
-        sink2.send("foo");
-        assert_eq!(rx.try_recv(), Ok((1, "foo")));
-
-        sink2.send("bar");
-        assert_eq!(rx.try_recv(), Err(Empty));
-
-        sink2.send("asd");
-        sink1.send(2);
-        assert_eq!(rx.try_recv(), Ok((2, "asd")));
     }
 
     #[test]
