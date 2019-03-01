@@ -525,6 +525,58 @@ impl<T: Clone + Send + 'static> Stream<T> {
         Stream::new(new_cbs, Source::stream2(self, other))
     }
 
+    /// Combines pairs of values from two streams using their last value seen.
+    ///
+    /// This creates a Stream that sends the last value of `self` and `other` when either of those
+    /// receives an event.
+    /// The output stream will not send any value until it receives a value from both input streams.
+    #[inline]
+    pub fn combine<U>(&self, other: &Stream<U>) -> Stream<(T, U)>
+    where
+        U: Clone + Send + 'static,
+    {
+        self.combine_with(other, |a, b| (a, b))
+    }
+
+    /// Combines two streams using a custom function.
+    pub fn combine_with<U, F, R>(&self, other: &Stream<U>, f: F) -> Stream<R>
+    where
+        F: Fn(T, U) -> R + Clone + Send + Sync + 'static,
+        U: Clone + Send + 'static,
+        R: 'static,
+    {
+        let (new_cbs, weak1) = arc_and_weak(Callbacks::new());
+        let weak2 = weak1.clone();
+
+        let left = Arc::new(Mutex::new(None));
+        let right = Arc::new(Mutex::new(None));
+        let left1 = left.clone();
+        let right1 = right.clone();
+        let f_ = f.clone();
+
+        self.cbs.push(move |arg| {
+            with_weak!(weak1, |cb| {
+                let arg = arg.into_owned();
+                *left.lock() = Some(arg.clone());
+                if let Some(val) = right1.lock().as_ref() {
+                    cb.call(f(arg, U::clone(val)));
+                }
+            })
+        });
+
+        other.cbs.push(move |arg| {
+            with_weak!(weak2, |cb| {
+                let arg = arg.into_owned();
+                *right.lock() = Some(arg.clone());
+                if let Some(val) = left1.lock().as_ref() {
+                    cb.call(f_(T::clone(val), arg));
+                }
+            })
+        });
+
+        Stream::new(new_cbs, Source::stream2(self, other))
+    }
+
     /// Creates a future that returns the next value sent to this stream.
     #[cfg(feature = "nightly")]
     pub fn next(&self) -> StreamFuture<T> {
@@ -911,5 +963,27 @@ mod tests {
         sink2.send("asd");
         sink1.send(2);
         assert_eq!(rx.try_recv(), Ok((2, "asd")));
+    }
+
+    #[test]
+    fn stream_combine() {
+        use std::sync::mpsc::TryRecvError::Empty;
+
+        let sink1: Sink<i32> = Sink::new();
+        let sink2: Sink<&str> = Sink::new();
+        let combined = sink1.stream().combine(&sink2.stream());
+        let rx = combined.as_sync_channel(10);
+
+        sink1.send(1);
+        assert_eq!(rx.try_recv(), Err(Empty));
+
+        sink2.send("foo");
+        assert_eq!(rx.try_recv(), Ok((1, "foo")));
+
+        sink1.send(2);
+        assert_eq!(rx.try_recv(), Ok((2, "foo")));
+
+        sink1.send(3);
+        assert_eq!(rx.try_recv(), Ok((3, "foo")));
     }
 }
