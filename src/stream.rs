@@ -40,6 +40,7 @@ use crate::sync::Mutex;
 use crate::types::{Callbacks, MaybeOwned, ObserveResult, Storage, SumType2};
 use std::any::Any;
 use std::collections::VecDeque;
+use std::ops::{Bound, RangeBounds};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
@@ -438,6 +439,37 @@ impl<T: 'static> Stream<T> {
                         cb.call(arg);
                     }
                     cur_pos < index // drop the callback after we're done
+                })
+                .unwrap_or(false)
+        });
+        Stream::new(new_cbs, Source::stream(self))
+    }
+
+    /// Returns a stream that contains the values with index in the specified range.
+    pub fn elements_between<B>(&self, range: B) -> Self
+    where
+        B: RangeBounds<usize> + Send + Sync + 'static,
+    {
+        let (new_cbs, weak) = arc_and_weak(Callbacks::new());
+        let pos = AtomicUsize::new(0);
+        self.cbs.push(move |arg| {
+            weak.upgrade()
+                .map(|cb| {
+                    let cur_pos = pos.fetch_add(1, Ordering::Relaxed);
+                    let after_start = match range.start_bound() {
+                        Bound::Included(s) => cur_pos >= *s,
+                        Bound::Excluded(s) => cur_pos > *s,
+                        Bound::Unbounded => true,
+                    };
+                    let before_end = match range.end_bound() {
+                        Bound::Included(e) => cur_pos <= *e,
+                        Bound::Excluded(e) => cur_pos < *e,
+                        Bound::Unbounded => true,
+                    };
+                    if after_start && before_end {
+                        cb.call(arg)
+                    }
+                    before_end // drop the callback after we're past the end
                 })
                 .unwrap_or(false)
         });
@@ -996,5 +1028,25 @@ mod tests {
         assert_eq!(rx2.try_recv(), Ok(42));
         assert_eq!(rx2.try_recv(), Err(Empty));
         assert_eq!(rx3.try_recv(), Err(Empty));
+    }
+
+    #[test]
+    fn stream_elements_between() {
+        let sink: Sink<i32> = Sink::new();
+        let stream1 = sink.stream().elements_between(..3);
+        let stream2 = sink.stream().elements_between(2..=4);
+        let stream3 = sink.stream().elements_between(3..);
+        let rx1 = stream1.as_sync_channel(10);
+        let rx2 = stream2.as_sync_channel(10);
+        let rx3 = stream3.as_sync_channel(10);
+
+        sink.feed(&[1, 12, 42, 7, 13, -6, 22]);
+
+        let result1: Vec<_> = rx1.try_iter().collect();
+        let result2: Vec<_> = rx2.try_iter().collect();
+        let result3: Vec<_> = rx3.try_iter().collect();
+        assert_eq!(result1, [1, 12, 42]);
+        assert_eq!(result2, [42, 7, 13]);
+        assert_eq!(result3, [7, 13, -6, 22]);
     }
 }
