@@ -425,6 +425,24 @@ impl<T: 'static> Stream<T> {
             a
         })
     }
+
+    /// Returns a stream that contains only the Nth value from the input stream.
+    pub fn element_at(&self, index: usize) -> Self {
+        let (new_cbs, weak) = arc_and_weak(Callbacks::new());
+        let pos = AtomicUsize::new(0);
+        self.cbs.push(move |arg| {
+            weak.upgrade()
+                .map(|cb| {
+                    let cur_pos = pos.fetch_add(1, Ordering::Relaxed);
+                    if cur_pos == index {
+                        cb.call(arg);
+                    }
+                    cur_pos < index // drop the callback after we're done
+                })
+                .unwrap_or(false)
+        });
+        Stream::new(new_cbs, Source::stream(self))
+    }
 }
 
 impl<T: Clone + Send + 'static> Stream<T> {
@@ -957,5 +975,26 @@ mod tests {
 
         sink1.send(3);
         assert_eq!(rx.try_recv(), Ok((3, "foo")));
+    }
+
+    #[test]
+    fn stream_element_at() {
+        use std::sync::mpsc::TryRecvError::Empty;
+
+        let sink: Sink<i32> = Sink::new();
+        let stream1 = sink.stream().element_at(0);
+        let stream2 = sink.stream().element_at(2);
+        let stream3 = sink.stream().element_at(13);
+        let rx1 = stream1.as_sync_channel(10);
+        let rx2 = stream2.as_sync_channel(10);
+        let rx3 = stream3.as_sync_channel(10);
+
+        sink.feed(&[1, 12, 42, 7, 13]);
+
+        assert_eq!(rx1.try_recv(), Ok(1));
+        assert_eq!(rx1.try_recv(), Err(Empty));
+        assert_eq!(rx2.try_recv(), Ok(42));
+        assert_eq!(rx2.try_recv(), Err(Empty));
+        assert_eq!(rx3.try_recv(), Err(Empty));
     }
 }
