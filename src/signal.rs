@@ -70,6 +70,7 @@ impl<T> Signal<T> {
     ///
     /// The action of sampling pulls the value through the signal chain until it finds it's source,
     /// clones it if necessary, and then transforms it into the result value.
+    #[inline]
     pub fn sample(&self) -> T {
         self.0()
     }

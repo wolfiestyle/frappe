@@ -604,6 +604,7 @@ impl<T: Clone + Send + 'static> Stream<T> {
 
     /// Creates a future that returns the next value sent to this stream.
     #[cfg(feature = "nightly")]
+    #[inline]
     pub fn next(&self) -> StreamFuture<T> {
         StreamFuture::new(self.clone())
     }
