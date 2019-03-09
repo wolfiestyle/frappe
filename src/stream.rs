@@ -736,7 +736,7 @@ impl<T> Default for Stream<T> {
 
 /// Sends values into a stream.
 ///
-/// This is a restricted version of `Sink` used by `Stream::map_n`.
+/// This is a restricted version of `Sink` used by `Stream::map_n` and `Stream::scan_n`.
 #[derive(Debug)]
 pub struct Sender<T>(Sink<T>);
 
