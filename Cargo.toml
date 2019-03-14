@@ -1,6 +1,6 @@
 [package]
 name = "frappe"
-version = "0.4.4"
+version = "0.4.5"
 authors = ["darkstalker <slayerbeast@gmail.com>"]
 description = "Functional Reactive Programming library for Rust"
 documentation = "https://docs.rs/frappe"
