@@ -6,7 +6,7 @@ use std::future::Future;
 use std::mem;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::task::{Poll, Waker};
+use std::task::{Context, Poll, Waker};
 
 /// The state a stream future.
 #[derive(Debug)]
@@ -59,7 +59,7 @@ impl<T: Clone + Send + 'static> StreamFuture<T> {
             if let Some(st) = weak.upgrade() {
                 let mut storage = st.lock();
                 storage.value = FutureValue::Ready(val.into_owned());
-                if let Some(waker) = &storage.waker {
+                if let Some(waker) = storage.waker.take() {
                     waker.wake();
                 }
             }
@@ -92,7 +92,7 @@ impl<T: Clone + Send + 'static> StreamFuture<T> {
 impl<T> Future for StreamFuture<T> {
     type Output = T;
 
-    fn poll(self: Pin<&mut Self>, lw: &Waker) -> Poll<Self::Output> {
+    fn poll(self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
         let mut storage = self.storage.lock();
         match mem::replace(&mut storage.value, FutureValue::Pending) {
             FutureValue::Ready(value) => {
@@ -100,7 +100,7 @@ impl<T> Future for StreamFuture<T> {
                 Poll::Ready(value)
             }
             FutureValue::Pending => {
-                storage.waker = Some(lw.clone());
+                storage.waker = Some(ctx.waker().clone());
                 Poll::Pending
             }
             FutureValue::Finished => {

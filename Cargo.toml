@@ -24,7 +24,7 @@ either = { version = "1.1.0", optional = true }
 parking_lot = { version = "0.7.1", optional = true }
 crossbeam-utils = { version = "0.6.3", optional = true }
 lazycell = { version = "1.2.1", optional = true }
-futures-preview = { version = "0.3.0-alpha.13", optional = true }
+futures-preview = { version = "0.3.0-alpha.14", optional = true }
 
 [dev-dependencies]
 rand = "0.6.1"
