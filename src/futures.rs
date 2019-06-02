@@ -152,4 +152,32 @@ mod tests {
         sink.send(13);
         assert_eq!(block_on(&mut future), 13);
     }
+
+    #[test]
+    fn stream_await() {
+        use futures::executor::LocalPool;
+        use futures::task::SpawnExt;
+        use std::thread;
+        use std::time::Duration;
+
+        let sink = Sink::new();
+        let future = sink.stream().map(|a| *a * 2).next();
+        let mut pool = LocalPool::new();
+
+        pool.spawner()
+            .spawn(
+                async {
+                    let res = future.await;
+                    assert_eq!(res, 42);
+                },
+            )
+            .unwrap();
+
+        thread::spawn(move || {
+            thread::sleep(Duration::from_millis(100));
+            sink.send(21);
+        });
+
+        pool.run();
+    }
 }
