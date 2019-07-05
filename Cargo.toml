@@ -12,7 +12,7 @@ edition = "2018"
 
 [badges]
 travis-ci = { repository = "darkstalker/frappe" }
-maintenance = { status = "actively-developed" }
+maintenance = { status = "passively-maintained" }
 
 [features]
 default = ["either", "parking_lot", "crossbeam-utils", "lazycell"]
