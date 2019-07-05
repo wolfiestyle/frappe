@@ -9,14 +9,12 @@
 
 #[macro_use]
 mod helpers;
+pub mod futures;
 mod lift;
 pub mod signal;
 pub mod stream;
 mod sync;
 pub mod types;
-
-#[cfg(feature = "nightly")]
-pub mod futures;
 
 pub use crate::signal::Signal;
 pub use crate::stream::{Sink, Stream};

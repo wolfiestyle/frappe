@@ -34,6 +34,7 @@
 //! assert_eq!(signal.sample(), 20);
 //! ```
 
+use crate::futures::StreamFuture;
 use crate::helpers::arc_and_weak;
 use crate::signal::Signal;
 use crate::sync::Mutex;
@@ -46,9 +47,6 @@ use std::sync::Arc;
 
 #[cfg(feature = "either")]
 use crate::types::Either;
-
-#[cfg(feature = "nightly")]
-use crate::futures::StreamFuture;
 
 /// A source of events that feeds the streams connected to it.
 #[derive(Debug)]
@@ -603,7 +601,6 @@ impl<T: Clone + Send + 'static> Stream<T> {
     }
 
     /// Creates a future that returns the next value sent to this stream.
-    #[cfg(feature = "nightly")]
     #[inline]
     pub fn next(&self) -> StreamFuture<T> {
         StreamFuture::new(self.clone())
@@ -1020,5 +1017,32 @@ mod tests {
         assert_eq!(result1, [1, 12, 42]);
         assert_eq!(result2, [42, 7, 13]);
         assert_eq!(result3, [7, 13, -6, 22]);
+    }
+
+    #[cfg(feature = "nightly")]
+    #[test]
+    fn stream_await() {
+        use futures::executor::LocalPool;
+        use futures::task::SpawnExt;
+        use std::thread;
+        use std::time::Duration;
+
+        let sink = Sink::new();
+        let future = sink.stream().map(|a| *a * 2).next();
+        let mut pool = LocalPool::new();
+
+        pool.spawner()
+            .spawn(async {
+                let res = future.await;
+                assert_eq!(res, 42);
+            })
+            .unwrap();
+
+        thread::spawn(move || {
+            thread::sleep(Duration::from_millis(100));
+            sink.send(21);
+        });
+
+        pool.run();
     }
 }
