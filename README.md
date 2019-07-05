@@ -5,10 +5,9 @@
 Frappe is a concurrent Event-Driven FRP library. It aims to provide a simple, efficient and
 Rust-idiomatic way to write interactive applications in a declarative way.
 
-Experimental support for futures has been added. To enable it, use a nightly compiler and enable
-the "nightly" crate feature.
-
-*Work in progress, so the API can change at any time.*
+Events are processed in streams, and they can be accumulated and read using signals.
+Also stream events can be turned into futures using the `Stream::next` method, so you can
+listen to them via async/await.
 
 ## Usage
 
