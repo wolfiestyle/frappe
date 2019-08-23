@@ -5,7 +5,6 @@
 //!
 //! See each module documentation for more details.
 #![warn(missing_docs)]
-#![cfg_attr(feature = "nightly", feature(async_await))]
 
 #[macro_use]
 mod helpers;
