@@ -58,9 +58,7 @@ impl<T> Sink<T> {
     /// Creates a new sink.
     #[inline]
     pub fn new() -> Self {
-        Sink {
-            cbs: Default::default(),
-        }
+        Default::default()
     }
 
     /// Creates a stream that receives the events sent to this sink.
@@ -113,7 +111,9 @@ impl<T> Default for Sink<T> {
     /// Creates a new sink.
     #[inline]
     fn default() -> Self {
-        Sink::new()
+        Self {
+            cbs: Default::default(),
+        }
     }
 }
 

@@ -66,9 +66,7 @@ pub struct Callbacks<T> {
 impl<T> Callbacks<T> {
     /// Creates an empty callback list.
     pub fn new() -> Self {
-        Callbacks {
-            fs: Default::default(),
-        }
+        Default::default()
     }
 
     /// Adds a new closure to the callback list.
@@ -190,7 +188,10 @@ impl<T> Callbacks<T> {
 }
 
 impl<T> Default for Callbacks<T> {
+    #[inline]
     fn default() -> Self {
-        Callbacks::new()
+        Self {
+            fs: Default::default(),
+        }
     }
 }
