@@ -669,9 +669,8 @@ where
                     // drop callback if both output streams dropped
                     weak_2.upgrade().is_some()
                 }
-            } else
-            // if result.is_type2()
-            {
+            } else {
+                // ..if result.is_type2()
                 if let Some(cb) = weak_2.upgrade() {
                     cb.call(result.into_owned().into_type2().unwrap());
                     true
