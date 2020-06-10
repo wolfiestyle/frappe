@@ -431,14 +431,13 @@ impl<T: 'static> Stream<T> {
         let pos = AtomicUsize::new(0);
         self.cbs.push(move |arg| {
             weak.upgrade()
-                .map(|cb| {
+                .map_or(false, |cb| {
                     let cur_pos = pos.fetch_add(1, Ordering::Relaxed);
                     if cur_pos == index {
                         cb.call(arg);
                     }
                     cur_pos < index // drop the callback after we're done
                 })
-                .unwrap_or(false)
         });
         Stream::new(new_cbs, Source::stream(self))
     }
@@ -452,7 +451,7 @@ impl<T: 'static> Stream<T> {
         let pos = AtomicUsize::new(0);
         self.cbs.push(move |arg| {
             weak.upgrade()
-                .map(|cb| {
+                .map_or(false, |cb| {
                     let cur_pos = pos.fetch_add(1, Ordering::Relaxed);
                     let after_start = match range.start_bound() {
                         Bound::Included(s) => cur_pos >= *s,
@@ -469,7 +468,6 @@ impl<T: 'static> Stream<T> {
                     }
                     before_end // drop the callback after we're past the end
                 })
-                .unwrap_or(false)
         });
         Stream::new(new_cbs, Source::stream(self))
     }
