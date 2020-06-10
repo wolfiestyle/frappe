@@ -1019,7 +1019,6 @@ mod tests {
         assert_eq!(result3, [7, 13, -6, 22]);
     }
 
-    #[cfg(feature = "nightly")]
     #[test]
     fn stream_await() {
         use futures::executor::LocalPool;

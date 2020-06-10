@@ -28,7 +28,7 @@ lazycell = { version = "1.2.1", optional = true }
 [dev-dependencies]
 rand = "0.6.1"
 bencher = "0.1.5"
-futures-preview = "0.3.0-alpha.17"
+futures = "0.3.5"
 
 [[bench]]
 name = "simple"
