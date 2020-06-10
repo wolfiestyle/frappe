@@ -68,6 +68,7 @@ impl<T: Clone + Send + 'static> StreamFuture<T> {
     }
 
     /// Obtains the source stream.
+    #[inline]
     pub fn get_source(&self) -> &Stream<T> {
         &self.stream
     }

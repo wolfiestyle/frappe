@@ -56,6 +56,7 @@ pub struct Sink<T> {
 
 impl<T> Sink<T> {
     /// Creates a new sink.
+    #[inline]
     pub fn new() -> Self {
         Sink {
             cbs: Default::default(),
@@ -63,6 +64,7 @@ impl<T> Sink<T> {
     }
 
     /// Creates a stream that receives the events sent to this sink.
+    #[inline]
     pub fn stream(&self) -> Stream<T> {
         Stream::new(self.cbs.clone(), Source::None)
     }
@@ -117,6 +119,7 @@ impl<T> Default for Sink<T> {
 
 impl<T> Clone for Sink<T> {
     /// Creates a copy of this sink that references the same event source.
+    #[inline]
     fn clone(&self) -> Self {
         Sink {
             cbs: self.cbs.clone(),
@@ -154,11 +157,13 @@ pub struct Stream<T> {
 
 impl<T> Stream<T> {
     /// Creates a stream from it's components.
+    #[inline]
     fn new(cbs: Arc<Callbacks<T>>, source: Source) -> Self {
         Stream { cbs, source }
     }
 
     /// Creates a stream that never fires.
+    #[inline]
     pub fn never() -> Self {
         Stream::new(Default::default(), Source::None)
     }
@@ -712,6 +717,7 @@ impl<T: 'static> Stream<Stream<T>> {
 
 impl<T> Clone for Stream<T> {
     /// Creates a copy of this stream that references the same event chain.
+    #[inline]
     fn clone(&self) -> Self {
         Stream {
             cbs: self.cbs.clone(),
@@ -736,6 +742,7 @@ pub struct Sender<T>(Sink<T>);
 
 impl<T> Sender<T> {
     /// Constructs a new Sender from a list of callbacks.
+    #[inline]
     fn new(cbs: Arc<Callbacks<T>>) -> Self {
         Sender(Sink { cbs })
     }
@@ -755,6 +762,7 @@ impl<T> Sender<T> {
 
 impl<T> Clone for Sender<T> {
     /// Creates a copy of this sender that references the same event source.
+    #[inline]
     fn clone(&self) -> Self {
         Sender(self.0.clone())
     }

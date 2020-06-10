@@ -39,6 +39,7 @@ pub struct Signal<T>(Arc<dyn Fn() -> T + Send + Sync>);
 
 impl<T> Signal<T> {
     /// Creates a signal with constant value.
+    #[inline]
     pub fn constant(val: T) -> Self
     where
         T: Clone + Send + Sync + 'static,
@@ -47,6 +48,7 @@ impl<T> Signal<T> {
     }
 
     /// Creates a signal that samples it's values from an external source.
+    #[inline]
     pub fn from_fn<F>(f: F) -> Self
     where
         F: Fn() -> T + Send + Sync + 'static,
@@ -55,6 +57,7 @@ impl<T> Signal<T> {
     }
 
     /// Creates a signal from shared storage.
+    #[inline]
     pub(crate) fn from_storage<S>(storage: Arc<Storage<T>>, source: S) -> Self
     where
         T: Clone + Send + Sync + 'static,
@@ -190,6 +193,7 @@ impl<T: 'static> Signal<Signal<T>> {
 
 impl<T> Clone for Signal<T> {
     /// Creates a new signal that references the same value.
+    #[inline]
     fn clone(&self) -> Self {
         Signal(self.0.clone())
     }

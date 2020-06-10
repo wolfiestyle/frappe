@@ -39,23 +39,32 @@ impl<T> SumType2 for Option<T> {
     type Type1 = T;
     type Type2 = ();
 
+    #[inline]
     fn from_type1(val: Self::Type1) -> Self {
         Some(val)
     }
+
+    #[inline]
     fn from_type2(_: Self::Type2) -> Self {
         None
     }
 
+    #[inline]
     fn is_type1(&self) -> bool {
         self.is_some()
     }
+
+    #[inline]
     fn is_type2(&self) -> bool {
         self.is_none()
     }
 
+    #[inline]
     fn into_type1(self) -> Option<Self::Type1> {
         self
     }
+
+    #[inline]
     fn into_type2(self) -> Option<Self::Type2> {
         self.ok_or(()).err()
     }
@@ -65,23 +74,32 @@ impl<T, E> SumType2 for Result<T, E> {
     type Type1 = T;
     type Type2 = E;
 
+    #[inline]
     fn from_type1(val: Self::Type1) -> Self {
         Ok(val)
     }
+
+    #[inline]
     fn from_type2(val: Self::Type2) -> Self {
         Err(val)
     }
 
+    #[inline]
     fn is_type1(&self) -> bool {
         self.is_ok()
     }
+
+    #[inline]
     fn is_type2(&self) -> bool {
         self.is_err()
     }
 
+    #[inline]
     fn into_type1(self) -> Option<Self::Type1> {
         self.ok()
     }
+
+    #[inline]
     fn into_type2(self) -> Option<Self::Type2> {
         self.err()
     }
@@ -92,23 +110,32 @@ impl<L, R> SumType2 for Either<L, R> {
     type Type1 = L;
     type Type2 = R;
 
+    #[inline]
     fn from_type1(val: Self::Type1) -> Self {
         Either::Left(val)
     }
+
+    #[inline]
     fn from_type2(val: Self::Type2) -> Self {
         Either::Right(val)
     }
 
+    #[inline]
     fn is_type1(&self) -> bool {
         self.is_left()
     }
+
+    #[inline]
     fn is_type2(&self) -> bool {
         self.is_right()
     }
 
+    #[inline]
     fn into_type1(self) -> Option<Self::Type1> {
         self.left()
     }
+
+    #[inline]
     fn into_type2(self) -> Option<Self::Type2> {
         self.right()
     }
@@ -122,6 +149,7 @@ pub trait ObserveResult {
 
 impl ObserveResult for () {
     /// No return value: never dropped.
+    #[inline]
     fn is_callback_alive(self) -> bool {
         true
     }
@@ -129,6 +157,7 @@ impl ObserveResult for () {
 
 impl ObserveResult for bool {
     /// `bool` return value: dropped when it's `false`.
+    #[inline]
     fn is_callback_alive(self) -> bool {
         self
     }
@@ -136,6 +165,7 @@ impl ObserveResult for bool {
 
 impl<T> ObserveResult for Option<T> {
     /// `Option` return value: dropped when it's `None`.
+    #[inline]
     fn is_callback_alive(self) -> bool {
         self.is_some()
     }
@@ -143,6 +173,7 @@ impl<T> ObserveResult for Option<T> {
 
 impl<T, E> ObserveResult for Result<T, E> {
     /// `Result` return value: dropped when it's `Err`.
+    #[inline]
     fn is_callback_alive(self) -> bool {
         self.is_ok()
     }
