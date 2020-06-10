@@ -435,14 +435,13 @@ impl<T: 'static> Stream<T> {
         let (new_cbs, weak) = arc_and_weak(Callbacks::new());
         let pos = AtomicUsize::new(0);
         self.cbs.push(move |arg| {
-            weak.upgrade()
-                .map_or(false, |cb| {
-                    let cur_pos = pos.fetch_add(1, Ordering::Relaxed);
-                    if cur_pos == index {
-                        cb.call(arg);
-                    }
-                    cur_pos < index // drop the callback after we're done
-                })
+            weak.upgrade().map_or(false, |cb| {
+                let cur_pos = pos.fetch_add(1, Ordering::Relaxed);
+                if cur_pos == index {
+                    cb.call(arg);
+                }
+                cur_pos < index // drop the callback after we're done
+            })
         });
         Stream::new(new_cbs, Source::stream(self))
     }
@@ -455,24 +454,23 @@ impl<T: 'static> Stream<T> {
         let (new_cbs, weak) = arc_and_weak(Callbacks::new());
         let pos = AtomicUsize::new(0);
         self.cbs.push(move |arg| {
-            weak.upgrade()
-                .map_or(false, |cb| {
-                    let cur_pos = pos.fetch_add(1, Ordering::Relaxed);
-                    let after_start = match range.start_bound() {
-                        Bound::Included(s) => cur_pos >= *s,
-                        Bound::Excluded(s) => cur_pos > *s,
-                        Bound::Unbounded => true,
-                    };
-                    let before_end = match range.end_bound() {
-                        Bound::Included(e) => cur_pos <= *e,
-                        Bound::Excluded(e) => cur_pos < *e,
-                        Bound::Unbounded => true,
-                    };
-                    if after_start && before_end {
-                        cb.call(arg)
-                    }
-                    before_end // drop the callback after we're past the end
-                })
+            weak.upgrade().map_or(false, |cb| {
+                let cur_pos = pos.fetch_add(1, Ordering::Relaxed);
+                let after_start = match range.start_bound() {
+                    Bound::Included(s) => cur_pos >= *s,
+                    Bound::Excluded(s) => cur_pos > *s,
+                    Bound::Unbounded => true,
+                };
+                let before_end = match range.end_bound() {
+                    Bound::Included(e) => cur_pos <= *e,
+                    Bound::Excluded(e) => cur_pos < *e,
+                    Bound::Unbounded => true,
+                };
+                if after_start && before_end {
+                    cb.call(arg)
+                }
+                before_end // drop the callback after we're past the end
+            })
         });
         Stream::new(new_cbs, Source::stream(self))
     }
