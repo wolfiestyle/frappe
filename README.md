@@ -1,6 +1,6 @@
 # frappe - FRP library for Rust
 
-[![Build Status](https://travis-ci.org/darkstalker/frappe.svg?branch=master)](https://travis-ci.org/darkstalker/frappe) [![crates.io](https://meritbadge.herokuapp.com/frappe)](https://crates.io/crates/frappe) [![Documentation](https://docs.rs/frappe/badge.svg)](https://docs.rs/frappe)
+[![Build Status](https://travis-ci.org/wolfiestyle/frappe.svg?branch=master)](https://travis-ci.org/wolfiestyle/frappe) [![crates.io](https://meritbadge.herokuapp.com/frappe)](https://crates.io/crates/frappe) [![Documentation](https://docs.rs/frappe/badge.svg)](https://docs.rs/frappe)
 
 Frappe is a concurrent Event-Driven FRP library. It aims to provide a simple, efficient and
 Rust-idiomatic way to write interactive applications in a declarative way.
@@ -51,5 +51,5 @@ fn main() {
 }
 ```
 
-You can also check the [frappe-gtk examples](https://github.com/darkstalker/frappe-gtk/tree/master/examples)
+You can also check the [frappe-gtk examples](https://github.com/wolfiestyle/frappe-gtk/tree/master/examples)
 for more complex usage examples on GUI applications.
